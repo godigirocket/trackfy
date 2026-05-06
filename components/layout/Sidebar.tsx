@@ -3,197 +3,118 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Globe, Search, Zap, Coins, DollarSign, ChevronDown, ChevronRight, Bell, Settings } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useState } from "react";
+import { 
+  LayoutDashboard, 
+  Settings, 
+  BarChart2, 
+  Link2, 
+  Target, 
+  Facebook, 
+  Search, 
+  Wallet,
+  Zap,
+  Cpu,
+  BrainCircuit,
+  PieChart
+} from "lucide-react";
 
 const menuItems = [
   {
-    name: "Dashboard",
-    href: "/",
-    icon: LayoutDashboard,
+    label: "Core",
+    items: [
+      { label: "Dashboard", icon: LayoutDashboard, href: "/" },
+      { label: "Inteligência", icon: BrainCircuit, href: "/intelligence" },
+    ]
   },
   {
-    name: "Meta Ads",
-    icon: Globe,
-    subMenu: [
-      { name: "Campanhas", href: "/meta-ads/campaigns" },
-      { name: "Conjuntos", href: "/meta-ads/adsets" },
-      { name: "Anúncios", href: "/meta-ads/ads" },
-      { name: "Criativos", href: "/meta-ads/creatives" },
-    ],
+    label: "Rastreamento",
+    items: [
+      { label: "Integrações", icon: Link2, href: "/integrations" },
+      { label: "UTMs", icon: Target, href: "/utms" },
+    ]
   },
   {
-    name: "Google Ads",
-    icon: Search,
-    subMenu: [
-      { name: "Campanhas", href: "/google-ads/campaigns" },
-    ],
+    label: "Ads Manager",
+    items: [
+      { label: "Meta Ads", icon: Facebook, href: "/meta-ads/campaigns" },
+      { label: "Google Ads", icon: Search, href: "/google-ads" },
+      { label: "Regras", icon: Zap, href: "/rules" },
+    ]
   },
   {
-    name: "Inteligência",
-    href: "/intelligence",
-    icon: Zap,
+    label: "Financeiro",
+    items: [
+      { label: "Geral", icon: Wallet, href: "/finance" },
+    ]
   },
   {
-    name: "UTMs",
-    href: "/utms",
-    icon: Coins,
-  },
-  {
-    name: "Financeiro",
-    icon: DollarSign,
-    subMenu: [
-      { name: "Geral", href: "/finance" },
-      { name: "Pedidos", href: "/finance/orders" },
-      { name: "Relatórios", href: "/finance/reports" },
-    ],
-  },
-  {
-    name: "Regras",
-    href: "/rules",
-    icon: Zap,
-  },
-  {
-    name: "Notificações",
-    href: "/notifications",
-    icon: Bell,
-  },
-  {
-    name: "Configurações",
-    href: "/settings",
-    icon: Settings,
-  },
+    label: "Configurações",
+    items: [
+      { label: "Settings", icon: Settings, href: "/settings" },
+    ]
+  }
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [openSubMenus, setOpenSubMenus] = useState<Record<string, boolean>>({
-    "Meta Ads": pathname.includes("/meta-ads"),
-    "Financeiro": pathname.includes("/finance"),
-  });
-
-  const toggleSubMenu = (name: string) => {
-    setOpenSubMenus((prev) => ({ ...prev, [name]: !prev[name] }));
-  };
 
   return (
-    <aside className="w-[240px] glass border-r border-border flex flex-col h-full overflow-y-auto relative z-30">
-      <div className="p-6 flex flex-col gap-1">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#0064E0] to-[#7C3AED] flex items-center justify-center shadow-lg shadow-primary/20">
-            <Zap className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-black text-xl tracking-tighter text-foreground">Trackfy</span>
+    <div className="flex flex-col h-full bg-[#050505] border-r border-white/5 w-64 p-6 overflow-y-auto">
+      <div className="flex items-center gap-3 px-2 mb-12">
+        <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-[0_0_20px_-5px_rgba(100,116,139,0.5)]">
+          <Zap className="text-white fill-white" size={24} />
         </div>
-        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pl-11">Enterprise Tracking</p>
+        <div className="flex flex-col">
+          <span className="font-black text-xl tracking-tighter text-white">Trackfy</span>
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 leading-none">Enterprise Tracking</span>
+        </div>
       </div>
 
-      <nav className="flex-1 px-4 space-y-8 mt-4">
-        {/* Core Section */}
-        <div className="space-y-1">
-          <p className="px-3 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-2">Core</p>
-          <Link
-            href="/"
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-bold transition-all",
-              pathname === "/" ? "text-primary bg-primary/10 shadow-sm" : "text-muted-foreground hover:bg-muted/50"
-            )}
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            <span>Dashboard</span>
-          </Link>
-        </div>
-
-        {/* Rastreamento Section */}
-        <div className="space-y-1">
-          <p className="px-3 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-2">Rastreamento</p>
-          <Link
-            href="/integrations"
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-bold transition-all",
-              pathname === "/integrations" ? "text-primary bg-primary/10 shadow-sm" : "text-muted-foreground hover:bg-muted/50"
-            )}
-          >
-            <Globe className="w-4 h-4" />
-            <span>Integrações</span>
-          </Link>
-          <Link
-            href="/utms"
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-bold transition-all",
-              pathname === "/utms" ? "text-primary bg-primary/10 shadow-sm" : "text-muted-foreground hover:bg-muted/50"
-            )}
-          >
-            <Coins className="w-4 h-4" />
-            <span>UTMs</span>
-          </Link>
-        </div>
-
-        {/* Ads Section */}
-        <div className="space-y-1">
-          <p className="px-3 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-2">Ads Manager</p>
-          <button
-            onClick={() => toggleSubMenu("Meta Ads")}
-            className={cn(
-              "w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-bold transition-all",
-              pathname.includes("/meta-ads") ? "text-primary bg-primary/10 shadow-sm" : "text-muted-foreground hover:bg-muted/50"
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <Globe className="w-4 h-4" />
-              <span>Meta Ads</span>
+      <nav className="flex-1 space-y-10">
+        {menuItems.map((group) => (
+          <div key={group.label} className="space-y-4">
+            <h3 className="px-4 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">
+              {group.label}
+            </h3>
+            <div className="space-y-1">
+              {group.items.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group",
+                      isActive 
+                        ? "bg-primary/10 text-white shadow-[0_0_15px_-5px_rgba(100,116,139,0.3)]" 
+                        : "text-muted-foreground/60 hover:text-white hover:bg-white/5"
+                    )}
+                  >
+                    <item.icon size={18} className={cn(
+                      "transition-transform duration-300 group-hover:scale-110",
+                      isActive ? "text-primary" : "text-muted-foreground/40"
+                    )} />
+                    <span className="text-xs font-black uppercase tracking-widest">{item.label}</span>
+                    {isActive && (
+                      <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_rgba(100,116,139,0.8)]" />
+                    )}
+                  </Link>
+                );
+              })}
             </div>
-            {openSubMenus["Meta Ads"] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
-          {openSubMenus["Meta Ads"] && (
-            <div className="ml-9 space-y-1 mt-1 border-l border-border pl-3">
-              {[
-                { name: "Campanhas", href: "/meta-ads/campaigns" },
-                { name: "Criativos", href: "/meta-ads/creatives" }
-              ].map(sub => (
-                <Link
-                  key={sub.name}
-                  href={sub.href}
-                  className={cn(
-                    "block py-1.5 text-xs font-bold transition-colors",
-                    pathname === sub.href ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {sub.name}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Financeiro Section */}
-        <div className="space-y-1">
-          <p className="px-3 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-2">Financeiro</p>
-          <Link
-            href="/finance"
-            className={cn(
-              "flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-bold transition-all",
-              pathname.includes("/finance") ? "text-primary bg-primary/10 shadow-sm" : "text-muted-foreground hover:bg-muted/50"
-            )}
-          >
-            <DollarSign className="w-4 h-4" />
-            <span>Geral</span>
-          </Link>
-        </div>
+          </div>
+        ))}
       </nav>
 
-      <div className="p-4 mt-auto border-t border-border/50">
-        <div className="flex items-center gap-3 px-2">
-          <Avatar className="h-9 w-9 border-2 border-primary/20">
-            <AvatarFallback className="bg-primary text-white text-xs font-black">JU</AvatarFallback>
-          </Avatar>
-          <div className="flex flex-col">
-            <span className="text-xs font-black text-foreground">juam</span>
-            <span className="text-[10px] font-bold text-primary uppercase tracking-widest">Premium Plan</span>
+      <div className="mt-auto pt-10 px-4">
+        <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/10 to-transparent border border-primary/20 space-y-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-primary">Pro Plan Active</p>
+          <div className="h-1.5 w-full bg-black/40 rounded-full overflow-hidden border border-white/5">
+            <div className="h-full bg-primary w-2/3" />
           </div>
+          <p className="text-[9px] font-bold text-muted-foreground uppercase">6.4k / 10k Events</p>
         </div>
       </div>
-    </aside>
+    </div>
   );
 }
