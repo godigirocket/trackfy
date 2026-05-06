@@ -2,8 +2,8 @@
 
 import { useAppStore } from "@/store/useAppStore";
 import { Search, Filter, X } from "lucide-react";
-import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/intelligence/DateRangePicker";
 
 export function DashboardFilters() {
@@ -43,8 +43,8 @@ export function DashboardFilters() {
           className="bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all font-bold uppercase tracking-tighter"
         >
           <option value="all" className="bg-[#0a0a0c]">Todos Status</option>
-          <option value="active" className="bg-[#0a0a0c]">🟢 Ativas</option>
-          <option value="paused" className="bg-[#0a0a0c]">⚪ Pausadas</option>
+          <option value="active" className="bg-[#0a0a0c]">Ativas</option>
+          <option value="paused" className="bg-[#0a0a0c]">Pausadas</option>
         </select>
 
         <DateRangePicker />

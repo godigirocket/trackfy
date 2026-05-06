@@ -18,7 +18,10 @@ interface CampaignIntel {
   signalReason: string;
 }
 
-export function OptimizationPanel({ intel }: { intel: CampaignIntel[] }) {
+export function OptimizationPanel({ intel, onCampaignClick }: { 
+  intel: CampaignIntel[];
+  onCampaignClick?: (id: string) => void;
+}) {
   const scale = intel.filter(c => c.signal === 'scale');
   const monitor = intel.filter(c => c.signal === 'monitor');
   const optimize = intel.filter(c => c.signal === 'optimize');
@@ -46,7 +49,9 @@ export function OptimizationPanel({ intel }: { intel: CampaignIntel[] }) {
           </div>
         ) : (
           items.map((c: any) => (
-            <div key={c.campaign_id} className="p-3 bg-white/5 rounded-xl border border-white/5 space-y-2 hover:border-white/10 transition-all">
+            <div key={c.campaign_id} 
+              onClick={() => onCampaignClick ? onCampaignClick(c.campaign_id) : useAppStore.getState().setDrawerCampaignId(c.campaign_id)}
+              className="p-3 bg-white/5 rounded-xl border border-white/5 space-y-2 hover:border-[var(--accent)] hover:bg-[var(--accent)]/5 cursor-pointer transition-all active:scale-[0.98]">
               <div className="flex justify-between items-start gap-4">
                 <p className="text-[11px] font-bold text-white leading-tight truncate">{c.campaign_name}</p>
                 <div className="flex flex-col items-end shrink-0">

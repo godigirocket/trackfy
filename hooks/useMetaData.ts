@@ -18,7 +18,7 @@ export function clearFetchCache() {
   isFetching = false;
 }
 
-function resolveTimeParams(period: string, customStart: string, customEnd: string) {
+function resolveTimeParams(period: string, customStart: string | null, customEnd: string | null) {
   if (period === "last_2d" || period === "last_3d") {
     const days = period === "last_2d" ? 2 : 3;
     const end = new Date();
@@ -42,10 +42,14 @@ function loadFromCache(accountId: string, periodKey: string) {
   const creatives  = readCache(accountId, periodKey, "creatives");
   const hierarchy  = readCache(accountId, periodKey, "hierarchy");
 
-  if (dataA)      store.setData(dataA, []);
-  if (dataAds)    store.setDataAds(dataAds);
-  if (hourlyA)    store.setHourlyData(hourlyA, []);
-  if (breakdowns) store.setBreakdownData(breakdowns.age || [], breakdowns.gender || [], breakdowns.placement || [], breakdowns.region || []);
+  if (dataA)      store.setDataA(dataA);
+  if (dataAds)    store.setMetaAdsData(dataAds);
+  if (hourlyA)    store.setHourlyDataA(hourlyA);
+  if (breakdowns) {
+    store.setAgeBreakdownA(breakdowns.age || []);
+    store.setGenderBreakdownA(breakdowns.gender || []);
+    store.setRegionBreakdownA(breakdowns.region || []);
+  }
   if (creatives)  store.setCreativesHD(creatives);
   if (hierarchy)  store.setHierarchy(hierarchy);
 
@@ -55,9 +59,17 @@ function loadFromCache(accountId: string, periodKey: string) {
 /** Sleep helper */
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+let lastErrorTime = 0;
+const SESSION_ERROR_COOLDOWN = 60_000; // 1 minute cooldown on session errors
+
 export async function runRefresh(force = false) {
-  const { token, accountId, period, customStart, customEnd } = useAppStore.getState();
+  const { token, accountId, period, customStart, customEnd, apiError } = useAppStore.getState();
   if (!token || !accountId) return;
+
+  // If we had a session error recently, don't auto-retry unless forced
+  if (!force && apiError?.includes("expirou") && (Date.now() - lastErrorTime < SESSION_ERROR_COOLDOWN)) {
+    return;
+  }
 
   // Hard rate limit on forced syncs
   if (force) {
@@ -89,70 +101,88 @@ export async function runRefresh(force = false) {
     return;
   }
 
+  console.log("[MetaAPI] Starting refresh...", { periodKey, force });
   isFetching = true;
   lastFetchKey = key;
 
   const store = useAppStore.getState();
   if (!hadCache) store.setLoading(true);
-  store.setApiError(null);
+  // Only clear error if forced or if it's not a session error
+  if (force || !apiError?.includes("expirou")) store.setApiError(null);
 
   try {
-    const tp2 = { period: tp.period, customStart: tp.customStart, customEnd: tp.customEnd };
+    const tp2 = { 
+      period: tp.period, 
+      customStart: tp.customStart || undefined, 
+      customEnd: tp.customEnd || undefined 
+    };
 
-    // ── Step 1: Primary insights (campaign + ad) — sequential to avoid rate limit ──
-    const campRes = await fetchMetaInsights(accountId, token, { ...tp2, level: "campaign" }).catch(() => []);
-    await sleep(500); // 500ms gap between calls
-    const adRes = await fetchMetaInsights(accountId, token, { ...tp2, level: "ad" }).catch(() => []);
+    // ── Step 1: Primary insights (campaign + ad) ──
+    const campRes = await fetchMetaInsights(accountId, token, { ...tp2, level: "campaign" });
+    await sleep(400);
+    const adRes = await fetchMetaInsights(accountId, token, { ...tp2, level: "ad" });
 
     if (campRes.length > 0) {
       writeCache(accountId, periodKey, "campaign", campRes);
-      useAppStore.getState().setData(campRes, []);
+      useAppStore.getState().setDataA(campRes);
     }
     if (adRes.length > 0) {
       writeCache(accountId, periodKey, "ad", adRes);
-      useAppStore.getState().setDataAds(adRes);
+      useAppStore.getState().setMetaAdsData(adRes);
     }
 
-    // ── Step 2: Hierarchy (campaigns/adsets/ads) — needed for campaign manager ──
-    await sleep(800);
-    const hierRes = await fetchAccountStructure(accountId, token).catch(() => null);
+    // ── Step 2: Hierarchy ──
+    await sleep(600);
+    const hierRes = await fetchAccountStructure(accountId, token);
     if (hierRes) {
       useAppStore.getState().setHierarchy(hierRes as any);
       writeCache(accountId, periodKey, "hierarchy", hierRes);
     }
 
     // ── Step 3: Hourly data ──
-    await sleep(800);
-    const hourlyRes = await fetchHourlyInsights(accountId, token, tp2).catch(() => []);
+    await sleep(600);
+    const hourlyRes = await fetchHourlyInsights(accountId, token, tp2);
     if (hourlyRes.length > 0) {
       writeCache(accountId, periodKey, "hourly", hourlyRes);
-      useAppStore.getState().setHourlyData(hourlyRes, []);
+      useAppStore.getState().setHourlyDataA(hourlyRes);
     }
 
-    // ── Step 4: Creatives (most likely to hit rate limit — do last with longer delay) ──
-    await sleep(1000);
-    const crRes = await fetchCreativesHD(accountId, token).catch(() => null);
+    // ── Step 4: Creatives ──
+    await sleep(800);
+    const crRes = await fetchCreativesHD(accountId, token);
     if (crRes && Object.keys(crRes).length > 0) {
       useAppStore.getState().setCreativesHD(crRes);
       writeCache(accountId, periodKey, "creatives", crRes);
     }
 
-    // ── Step 5: Breakdowns (optional, skip if rate limited) ──
-    await sleep(500);
-    const bdRes = await fetchBreakdowns(accountId, token, tp2).catch(() => null);
+    // ── Step 5: Breakdowns ──
+    await sleep(400);
+    const bdRes = await fetchBreakdowns(accountId, token, tp2);
     if (bdRes) {
-      useAppStore.getState().setBreakdownData(bdRes.age, bdRes.gender, bdRes.placement, bdRes.region);
+      useAppStore.getState().setAgeBreakdownA(bdRes.age);
+      useAppStore.getState().setGenderBreakdownA(bdRes.gender);
+      useAppStore.getState().setRegionBreakdownA(bdRes.region);
       writeCache(accountId, periodKey, "breakdowns", bdRes);
     }
 
     useAppStore.getState().setLastSync(
       new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     );
+    useAppStore.getState().setApiError(null);
   } catch (err: any) {
-    console.error("[MetaAPI]", err);
-    if (!hadCache) {
-      useAppStore.getState().setApiError(err?.message || "Erro na API do Facebook");
+    console.error("[MetaAPI Refresh Error]", err);
+    lastErrorTime = Date.now();
+    
+    let msg = err?.message || "Erro na API do Facebook";
+    if (msg === "SESSION_EXPIRED") {
+      msg = "Sessão do Meta Ads expirou. Por favor, atualize seu token nas configurações.";
+    } else if (msg === "RATE_LIMIT") {
+      msg = "Limite de requisições atingido na Meta. O sistema aguardará alguns minutos.";
+      // Set a longer cooldown for rate limits
+      lastErrorTime = Date.now() + 300000; // 5 extra minutes
     }
+    
+    useAppStore.getState().setApiError(msg);
   } finally {
     isFetching = false;
     useAppStore.getState().setLoading(false);

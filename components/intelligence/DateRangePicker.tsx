@@ -67,6 +67,9 @@ export function DateRangePicker() {
     // We only set the period. The API will use date_preset.
     setPeriod(preset.id);
     if (preset.id !== "custom") {
+      setCustomRange(null, null);
+      setTempStart(null);
+      setTempEnd(null);
       setIsOpen(false);
     }
   };

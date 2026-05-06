@@ -171,7 +171,7 @@ export function ControlBar() {
           <FilterPill
             label="Campanhas"
             icon={Target}
-            options={hierarchy.campaigns.map(c => ({ id: c.id, name: c.name }))}
+            options={hierarchy.campaigns.map((c: any) => ({ id: c.id, name: c.name }))}
             selected={selectedCampaigns}
             onChange={setSelectedCampaigns}
           />
@@ -180,7 +180,7 @@ export function ControlBar() {
           <FilterPill
             label="Conjuntos"
             icon={Tag}
-            options={hierarchy.adsets.map(c => ({ id: c.id, name: c.name }))}
+            options={hierarchy.adsets.map((c: any) => ({ id: c.id, name: c.name }))}
             selected={selectedAdSets}
             onChange={setSelectedAdSets}
           />

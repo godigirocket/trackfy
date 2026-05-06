@@ -2,7 +2,7 @@
 
 import { useAppStore } from "@/store/useAppStore";
 import { User, ShieldCheck } from "lucide-react";
-import { cn } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 
 export function DirectorModeToggle() {
   const { isDirectorMode, setIsDirectorMode } = useAppStore();

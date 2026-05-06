@@ -10,7 +10,7 @@ import {
   CONVERSATION_ACTION_TYPES
 } from "@/lib/formatters";
 import { safeArray } from "@/lib/safeArray";
-import { cn } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 import { DollarSign, MessageSquare, Eye, MousePointer2 } from "lucide-react";
 
 interface KpiCardProps {

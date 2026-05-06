@@ -4,7 +4,7 @@ import { MetaInsight } from "@/types";
 import { calculateHookRate, calculateHoldRate } from "@/services/rulesEngine";
 import { formatPercent } from "@/lib/formatters";
 import { Play, MousePointer2, Star, AlertTriangle, ImageIcon } from "lucide-react";
-import { cn } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
 
 interface CreativeCardProps {
@@ -20,7 +20,7 @@ export function CreativeCard({ insight, thumbnail }: CreativeCardProps) {
     (insight.ad_id ? creativesHD[insight.ad_id] : undefined) || thumbnail;
 
   if (!imageUrl && hierarchy?.ads) {
-    const hierarchyAd = hierarchy.ads.find(a => a.id === insight.ad_id);
+    const hierarchyAd = hierarchy.ads.find((a: any) => a.id === insight.ad_id);
     if (hierarchyAd) {
       const creative = (hierarchyAd as any).creative || (hierarchyAd as any).adcreatives?.data?.[0];
       imageUrl = creative?.image_url || creative?.thumbnail_url;

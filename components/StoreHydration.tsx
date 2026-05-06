@@ -2,9 +2,11 @@
 
 import { useEffect } from "react";
 import { useAppStore } from "@/store/useAppStore";
-import { runRefresh, clearFetchCache } from "@/hooks/useMetaData";
+import { runRefresh, clearFetchCache, useMetaData } from "@/hooks/useMetaData";
 
 export function StoreHydration() {
+  useMetaData(); // Watch global period/token/accountId changes
+
   useEffect(() => {
     // 1. Load persisted token/accountId from localStorage
     useAppStore.getState()._hydrate();

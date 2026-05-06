@@ -160,7 +160,7 @@ export function CampaignTimeline() {
                 yAxisId="left"
               >
                 <Label 
-                  value="🚀 ESCALA" 
+                  value="ESCALA" 
                   position="top" 
                   fill="#6366f1" 
                   className="text-[8px] font-black tracking-widest"

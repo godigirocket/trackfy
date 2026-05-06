@@ -33,8 +33,8 @@ const config = {
         "3xl": "32px",
       },
       fontFamily: {
-        sans: ["Manrope", "var(--font-inter)", "-apple-system", "sans-serif"],
-        mono: ["var(--font-jetbrains-mono)", "JetBrains Mono", "monospace"],
+        sans: ["Inter", "Outfit", "var(--font-inter)", "-apple-system", "sans-serif"],
+        mono: ["JetBrains Mono", "var(--font-jetbrains-mono)", "Fira Code", "monospace"],
       },
       fontSize: {
         "2xs": ["10px", { lineHeight: "14px" }],

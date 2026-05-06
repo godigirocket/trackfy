@@ -3,16 +3,16 @@
 import { useAppStore } from "@/store/useAppStore";
 import { analyzeCampaigns } from "@/services/rulesEngine";
 import { Bell, ShieldAlert, Zap } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
-import { cn } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { extractMetric, LEAD_ACTION_TYPES, CONVERSATION_ACTION_TYPES } from "@/lib/formatters";
 import { safeArray } from "@/lib/safeArray";
 
 export function AlertsFeed() {
-  const { dataA } = useAppStore();
+  const { metaData } = useAppStore();
 
   const campaigns: Record<string, any> = {};
-  safeArray(dataA).forEach(r => {
+  safeArray(metaData).forEach(r => {
     const id = r.campaign_id;
     if (!campaigns[id]) {
       campaigns[id] = { id, name: r.campaign_name, spend: 0, imps: 0, clicks: 0, leads: 0, convs: 0, frequency: 0 };

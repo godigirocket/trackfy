@@ -1,118 +1,108 @@
 "use client";
 
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Bell, RefreshCw, Calendar as CalendarIcon } from "lucide-react";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { TokenManager } from "@/components/layout/TokenManager";
 import { useAppStore } from "@/store/useAppStore";
-import { runRefresh, clearFetchCache } from "@/hooks/useMetaData";
-import { useState, useEffect } from "react";
-import { RotateCw, AlertCircle, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const PERIODS = [
-  { label: "Hoje",    value: "today" },
-  { label: "Ontem",  value: "yesterday" },
-  { label: "2D",     value: "last_2d" },
-  { label: "3D",     value: "last_3d" },
-  { label: "7D",     value: "last_7d" },
-  { label: "14D",    value: "last_14d" },
-  { label: "30D",    value: "last_30d" },
-  { label: "Máximo", value: "maximum" },
-];
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export function Topbar() {
-  const { period, setPeriod, isLoading, apiError, token, accountId, theme, setTheme } = useAppStore();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  const { period, setPeriod, userName } = useAppStore();
 
-  const isConfigured = mounted && !!token && !!accountId;
-
-  const handleSync = () => {
-    clearFetchCache();
-    runRefresh(true);
-  };
+  const periods = [
+    { label: "Hoje", value: "today" },
+    { label: "Ontem", value: "yesterday" },
+    { label: "7D", value: "last_7d" },
+    { label: "30D", value: "last_30d" },
+    { label: "Máximo", value: "maximum" },
+  ];
 
   return (
-    <>
-      <header
-        className="fixed top-0 right-0 z-40 h-14 flex items-center justify-between px-6 border-b"
-        style={{
-          left: "220px",
-          background: "var(--surface)",
-          borderColor: "var(--border)",
-        }}
-      >
-        {/* Left: status */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className={cn("w-1.5 h-1.5 rounded-full transition-colors",
-              !mounted ? "bg-[var(--surface-3)]" :
-              isLoading ? "bg-warning animate-pulse" :
-              isConfigured ? "bg-success animate-pulse" : "bg-danger")} />
-            <span className="text-[12px] text-[var(--text-2)] font-medium" suppressHydrationWarning>
-              {!mounted ? "" : isLoading ? "Sincronizando" : isConfigured ? "Conectado" : "Desconectado"}
-            </span>
-          </div>
-          {mounted && !isConfigured && (
-            <a href="/settings" className="text-[11px] text-accent hover:text-accent/80 transition-colors font-medium">
-              Configurar →
-            </a>
-          )}
+    <header className="h-16 glass border-b border-border flex items-center justify-between px-6 sticky top-0 z-20">
+      <div className="flex items-center gap-6">
+        <div className="flex bg-muted/50 p-1 rounded-xl border border-border">
+          {periods.map((p) => (
+            <button
+              key={p.value}
+              onClick={() => setPeriod(p.value)}
+              className={cn(
+                "px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
+                period === p.value 
+                  ? "bg-background text-primary shadow-sm" 
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
 
-        {/* Right: period + sync */}
-        <div className="flex items-center gap-2">
-          {/* Period selector */}
-          <div className="flex items-center rounded-lg p-0.5 gap-0.5 border"
-            style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
-            {PERIODS.map(p => (
-              <button key={p.value} onClick={() => setPeriod(p.value)} suppressHydrationWarning
-                className={cn(
-                  "px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-all duration-150 whitespace-nowrap",
-                  mounted && period === p.value
-                    ? "bg-accent text-white shadow-sm"
-                    : "text-[var(--text-2)] hover:text-[var(--text)] hover:bg-[var(--surface-3)]"
-                )}>
-                {p.label}
-              </button>
-            ))}
-          </div>
+        <div className="h-6 w-[1px] bg-border mx-2" />
 
-          {/* Theme toggle */}
-          <button
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="p-1.5 rounded-lg transition-all border"
-            style={{ color: "var(--text-2)", borderColor: "var(--border)", background: "var(--surface-2)" }}
-            title={theme === "dark" ? "Tema claro" : "Tema escuro"}
-            suppressHydrationWarning
-          >
-            {theme === "dark"
-              ? <Sun className="w-3.5 h-3.5" />
-              : <Moon className="w-3.5 h-3.5" />}
-          </button>
+        <Button variant="outline" size="sm" className="h-9 gap-2 text-[10px] font-black uppercase tracking-widest rounded-xl border-border bg-background">
+          <RefreshCw className="w-3.5 h-3.5" />
+          Sincronizar
+        </Button>
+        
+        <TokenManager />
+      </div>
 
-          {/* Sync */}
-          <button onClick={handleSync} disabled={isLoading || !isConfigured}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all",
-              isConfigured
-                ? "bg-accent hover:bg-accent-2 text-white disabled:opacity-50"
-                : "text-[var(--text-3)] cursor-not-allowed border"
-            )}
-            style={!isConfigured ? { borderColor: "var(--border)", background: "var(--surface-2)" } : {}}>
-            <RotateCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
-            <span className="hidden sm:inline">{isLoading ? "Sync..." : "Sync"}</span>
-          </button>
-        </div>
-      </header>
+      <div className="flex items-center gap-4">
+        <NotificationBell />
 
-      {/* Error banner */}
-      {mounted && apiError && (
-        <div className="fixed z-30 flex items-center gap-2 px-4 py-2 text-[12px] border-b border-danger/20 bg-danger/10"
-          style={{ top: "56px", left: "220px", right: 0 }}>
-          <AlertCircle className="w-3.5 h-3.5 text-danger flex-shrink-0" />
-          <span className="text-danger font-medium">Erro:</span>
-          <span className="text-danger/80 truncate">{apiError}</span>
-          <button onClick={() => useAppStore.getState().setApiError(null)} className="ml-auto text-danger/50 hover:text-danger text-xs">✕</button>
-        </div>
-      )}
-    </>
+        <ThemeToggle />
+
+        <div className="h-6 w-[1px] bg-border mx-1" />
+
+        <DropdownMenu>
+          <DropdownMenuTrigger className="relative h-9 flex items-center gap-3 pl-1 pr-3 rounded-full border border-border hover:bg-muted transition-all text-sm font-medium">
+              <Avatar className="h-7 w-7 border border-border">
+                <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-black">
+                  {userName?.substring(0, 2).toUpperCase() || "JU"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="text-left hidden md:block">
+                <p className="text-[10px] font-black tracking-tight">{userName}</p>
+                <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest">Admin</p>
+              </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-56 border-border bg-card" align="end">
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col space-y-1">
+                <p className="text-sm font-bold leading-none">{userName}</p>
+                <p className="text-xs leading-none text-muted-foreground uppercase tracking-widest mt-1">
+                  juam.premium@trackfy.io
+                </p>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-xs font-bold uppercase tracking-widest">Meu Perfil</DropdownMenuItem>
+            <DropdownMenuItem className="text-xs font-bold uppercase tracking-widest">Configurações</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive font-black text-xs uppercase tracking-widest">
+              Sair
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </header>
   );
 }

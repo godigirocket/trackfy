@@ -1,11 +1,8 @@
 {
-  "framework": "nextjs",
-  "buildCommand": "npm run build",
-  "installCommand": "npm install",
-  "outputDirectory": ".next",
-  "functions": {
-    "app/api/meta/route.ts": {
-      "maxDuration": 60
+  "crons": [
+    {
+      "path": "/api/rules/execute",
+      "schedule": "0 0 * * *"
     }
-  }
+  ]
 }

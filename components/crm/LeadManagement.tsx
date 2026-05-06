@@ -13,7 +13,7 @@ export function LeadManagement() {
   const recentLeads = useMemo(() => {
     const list: any[] = [];
     dataA.forEach(insight => {
-      const leads = insight.actions?.find(a => a.action_type === 'lead')?.value || "0";
+      const leads = insight.actions?.find((a: any) => a.action_type === 'lead')?.value || "0";
       const leadCount = parseInt(leads);
       for (let i = 0; i < leadCount; i++) {
         list.push({
@@ -39,7 +39,7 @@ export function LeadManagement() {
       date: new Date().toISOString()
     };
     
-    updateCRMLead({
+    updateCRMLead(lead.id, {
       ...lead,
       status,
       sale_value: status === 'converted' ? (lead.sale_value || 0) : 0

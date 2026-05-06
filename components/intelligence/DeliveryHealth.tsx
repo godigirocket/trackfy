@@ -11,23 +11,23 @@ export function DeliveryHealth() {
 
   const healthData = useMemo(() => {
     // 1. Filtered data for calculation
-    const filtered = dataA.filter(item => {
+    const filtered = dataA.filter((item: any) => {
       if (selectedCampaigns.length > 0 && !selectedCampaigns.includes(item.campaign_id)) return false;
       if (selectedAdSets.length > 0 && !selectedAdSets.includes(item.adset_id || "")) return false;
       return true;
     });
 
-    const totalSpend = filtered.reduce((acc, curr) => acc + parseFloat(curr.spend || "0"), 0);
-    const totalLeads = filtered.reduce((acc, curr) => acc + extractMetric(curr.actions, ["lead", "leadgen.other"]), 0);
+    const totalSpend = filtered.reduce((acc: number, curr: any) => acc + parseFloat(curr.spend || "0"), 0);
+    const totalLeads = filtered.reduce((acc: number, curr: any) => acc + extractMetric(curr.actions, ["lead", "leadgen.other"]), 0);
     const avgCpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
     
     // 2. Frequency Fatigue
     const avgFreq = filtered.length > 0 
-      ? filtered.reduce((acc, curr) => acc + parseFloat(curr.frequency || "1"), 0) / filtered.length 
+      ? filtered.reduce((acc: number, curr: any) => acc + parseFloat(curr.frequency || "1"), 0) / filtered.length 
       : 1;
 
     // 3. Learning Phase Analysis (from Hierarchy)
-    const learningAdSets = hierarchy?.adsets.filter(as => 
+    const learningAdSets = hierarchy?.adsets.filter((as: any) => 
       as.effective_status.includes("LEARNING") && 
       (selectedCampaigns.length === 0 || selectedCampaigns.includes(as.campaign_id))
     ) || [];
@@ -35,8 +35,8 @@ export function DeliveryHealth() {
     // 4. Instability (Coefficient of variation of CPL)
     // Simplified: check if last 3 days CPL > account average CPL by 40%
     const recentData = filtered.slice(-3);
-    const recentSpend = recentData.reduce((s, c) => s + parseFloat(c.spend || "0"), 0);
-    const recentLeads = recentData.reduce((s, c) => s + extractMetric(c.actions, ["lead"]), 0);
+    const recentSpend = recentData.reduce((s: number, c: any) => s + parseFloat(c.spend || "0"), 0);
+    const recentLeads = recentData.reduce((s: number, c: any) => s + extractMetric(c.actions, ["lead"]), 0);
     const recentCpa = recentLeads > 0 ? recentSpend / recentLeads : 0;
     const isInstable = recentCpa > avgCpl * 1.4 && avgCpl > 0;
 
@@ -123,7 +123,7 @@ export function DeliveryHealth() {
                   {healthData.learningCount} conjuntos de anúncios ainda não estabilizaram. Evite edições significativas (orçamento, criativo) para não resetar o processo da Meta.
                 </p>
                 <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
-                  {healthData.learningAdSets.map(as => (
+                  {healthData.learningAdSets.map((as: any) => (
                     <span key={as.id} className="text-[9px] font-bold px-2 py-1 bg-white/5 border border-white/10 rounded uppercase text-muted truncate max-w-[150px]">
                       {as.name}
                     </span>

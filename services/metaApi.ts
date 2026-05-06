@@ -13,21 +13,29 @@ async function metaGet(url: string, attempt = 0): Promise<any> {
 
   // Proxy always returns 200; parse body to check for errors
   const json = await res.json();
-
-  // Retry on transient errors (timeout, rate limit, server errors)
-  const isTransient = json?.error?.is_transient
-    || json?.error?.code === 504
-    || json?.error?.code === 1
-    || json?.error?.code === 2
-    || json?.error?.code === 17; // rate limit
-
-  if (isTransient && attempt < 2) {
-    await new Promise(r => setTimeout(r, (attempt + 1) * 3000));
-    return metaGet(url, attempt + 1);
-  }
-
   if (json.error) {
-    console.error("[MetaAPI]", json.error);
+    const code = json.error.code;
+
+    // Session/token errors: throw IMMEDIATELY, no retries
+    if (code === 190 || code === 102) {
+      throw new Error("SESSION_EXPIRED");
+    }
+
+    const isTransient = json?.error?.is_transient
+      || code === 504 || code === 1 || code === 2 || code === 17;
+
+    if (isTransient && attempt < 2) {
+      const delay = code === 17 ? 10000 : (attempt + 1) * 3000;
+      await new Promise(r => setTimeout(r, delay));
+      return metaGet(url, attempt + 1);
+    }
+
+    console.error("[MetaAPI Error]", json.error);
+
+    if (code === 17 || code === 80004) {
+      throw new Error("RATE_LIMIT");
+    }
+
     throw new Error(json.error.message || "Meta API error");
   }
   return json;
@@ -239,13 +247,14 @@ export const fetchCreativesHD = async (accountId: string, token: string): Promis
   try {
     // Request full picture + thumbnail — picture gives higher resolution
     ads = await paginate(
-      `${BASE}/${id}/ads?access_token=${token}&fields=id,creative{id,thumbnail_url,image_url,picture,object_story_spec}&limit=100`,
+      `${BASE}/${id}/ads?access_token=${token}&fields=id,creative{id,thumbnail_url,image_url,object_story_spec}&limit=100`,
       10
     );
   } catch {
     try {
+      // Fallback: exclude image_url (which calls picture internally) to avoid #100 error on videos
       ads = await paginate(
-        `${BASE}/${id}/ads?access_token=${token}&fields=id,creative{id,thumbnail_url,picture}&limit=50`,
+        `${BASE}/${id}/ads?access_token=${token}&fields=id,creative{id,thumbnail_url}&limit=50`,
         10
       );
     } catch (e) {
@@ -257,12 +266,23 @@ export const fetchCreativesHD = async (accountId: string, token: string): Promis
   for (const ad of ads) {
     const c = ad.creative;
     if (!c) continue;
-    // Prefer picture (full-size) over thumbnail_url (low-res)
-    const url = c.picture
-      || c.image_url
+    // Prefer full-size image over thumbnail_url
+    let url = c.image_url
       || c.thumbnail_url
       || c.object_story_spec?.link_data?.image_url
       || c.object_story_spec?.photo_data?.url;
+
+    if (!url && c.id) {
+      try {
+        const fallback = await metaGet(`${BASE}/${c.id}?fields=thumbnail_url&access_token=${token}`);
+        if (fallback?.thumbnail_url) {
+          url = fallback.thumbnail_url;
+        }
+      } catch {
+        // Ignore fallback error
+      }
+    }
+
     if (url) urlMap[ad.id] = url;
   }
 
@@ -270,6 +290,58 @@ export const fetchCreativesHD = async (accountId: string, token: string): Promis
 };
 
 // ── WRITE OPERATIONS ──────────────────────────────────────────────────────
+export const duplicateCampaign = async (id: string, token: string) => {
+  try {
+    const res = await fetch(PROXY, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: `${BASE}/${id}/copy`,
+        method: "POST",
+        payload: { access_token: token },
+      }),
+    });
+    const json = await res.json();
+    if (json.error) return { success: false, error: json.error.message };
+    return { success: true, id: json.id };
+  } catch (e: any) {
+    return { success: false, error: e?.message };
+  }
+};
+export const createCampaign = async (accountId: string, token: string, fields: {
+  name: string;
+  objective: "OUTCOME_SALES" | "OUTCOME_LEADS" | "OUTCOME_TRAFFIC" | "OUTCOME_ENGAGEMENT" | "OUTCOME_AWARENESS";
+  status: "ACTIVE" | "PAUSED";
+  daily_budget: number;
+  special_ad_categories: string[];
+}) => {
+  const id = normalizeAccountId(accountId);
+  const p: Record<string, any> = {
+    name: fields.name,
+    objective: fields.objective,
+    status: fields.status,
+    daily_budget: String(fields.daily_budget),
+    special_ad_categories: JSON.stringify(fields.special_ad_categories),
+    access_token: token,
+  };
+  
+  try {
+    const res = await fetch(PROXY, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: `${BASE}/${id}/campaigns`,
+        method: "POST",
+        payload: p,
+      }),
+    });
+    const json = await res.json();
+    if (json.error) return { success: false, error: json.error.message };
+    return { success: true, id: json.id };
+  } catch (e: any) {
+    return { success: false, error: e?.message };
+  }
+};
 export const updateCampaign = (id: string, token: string, fields: {
   name?: string; status?: "ACTIVE" | "PAUSED" | "ARCHIVED"; daily_budget?: number;
 }) => {

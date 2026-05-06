@@ -31,9 +31,9 @@ export function CylinderFunnel() {
   const maxVal = Math.max(...stages.map(s => s.value), 1);
 
   return (
-    <div className="glass p-6 sm:p-8 animate-in fade-in duration-700">
+    <div className="card-2 p-6 sm:p-8 animate-in fade-in duration-700">
       <div className="mb-6">
-        <h3 className="text-sm font-black text-white uppercase tracking-widest">Funil de Conversão</h3>
+        <h3 className="text-sm font-black text-text uppercase tracking-widest">Funil de Conversão</h3>
         <p className="text-[10px] text-muted font-medium mt-1">Da impressão até a venda real — visão completa do seu pipeline.</p>
       </div>
 
@@ -64,7 +64,7 @@ export function CylinderFunnel() {
                 </div>
 
                 {/* Value */}
-                <span className="text-base sm:text-lg font-black mono text-white">
+                <span className="text-base sm:text-lg font-black mono text-text">
                   {formatNumber(stage.value)}
                 </span>
 
@@ -86,7 +86,7 @@ export function CylinderFunnel() {
 
               {/* Arrow between stages */}
               {i < stages.length - 1 && (
-                <ChevronRight className="w-4 h-4 text-white/20 flex-shrink-0 mx-1" />
+                <ChevronRight className="w-4 h-4 text-muted flex-shrink-0 mx-1" />
               )}
             </div>
           );
@@ -94,7 +94,7 @@ export function CylinderFunnel() {
       </div>
 
       {/* Summary row */}
-      <div className="mt-6 pt-4 border-t border-white/5 grid grid-cols-3 gap-4">
+      <div className="mt-6 pt-4 border-t border-border grid grid-cols-3 gap-4">
         {[
           { label: "CTR Geral", value: stages[0].value > 0 ? ((stages[1].value / stages[0].value) * 100).toFixed(2) + "%" : "0.00%", color: "text-accent" },
           { label: "Click → Lead", value: stages[1].value > 0 ? ((stages[2].value / stages[1].value) * 100).toFixed(2) + "%" : "0.00%", color: "text-emerald-400" },

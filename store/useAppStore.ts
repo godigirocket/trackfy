@@ -1,246 +1,260 @@
 import { create } from "zustand";
-import { AppState, MetaInsight, CRMLead, BreakdownInsight, AccountHierarchy } from "@/types";
+import { persist } from "zustand/middleware";
 
-// Keys that get saved to localStorage
-const PERSIST_KEYS = [
-  "token", "accountId", "geminiKey", "isDirectorMode",
-  "annotations", "campaignTags", "crmLeads",
-  "selectedCampaigns", "selectedAdSets", "selectedAds",
-  "statusFilters", "objectiveFilters", "placementFilters",
-  "ageFilters", "genderFilters",
-] as const;
+export interface AutomationRule {
+  id: string;
+  name: string;
+  metric: string;
+  operator: "gt" | "lt";
+  value: number;
+  action: "pause" | "notify" | "budget_down";
+  enabled: boolean;
+  lastRun?: string;
+  target?: string;
+}
 
-const STORAGE_KEY = "tf-store";
-
-interface AppStore extends AppState {
-  creativesHD: Record<string, string>;
-  setCreativesHD: (map: Record<string, string>) => void;
-  setToken: (token: string) => void;
-  setAccountId: (id: string) => void;
-  setGeminiKey: (key: string) => void;
+interface AppState {
+  // Navigation & UI
+  period: string;
   setPeriod: (period: string) => void;
-  setCustomRange: (start: string, end: string) => void;
-  setIsCompare: (val: boolean) => void;
-  setLoading: (val: boolean) => void;
-  setData: (dataA: MetaInsight[], dataB?: MetaInsight[]) => void;
-  setDataAds: (data: MetaInsight[]) => void;
-  setHourlyData: (dataA: MetaInsight[], dataB?: MetaInsight[]) => void;
-  setBreakdownData: (a: BreakdownInsight[], g: BreakdownInsight[], p: BreakdownInsight[], r?: BreakdownInsight[]) => void;
-  setBiData: (data: any[]) => void;
+  userName: string;
+  setUserName: (name: string) => void;
+  searchQuery: string;
   setSearchQuery: (query: string) => void;
-  setStatusFilter: (status: string) => void;
-  setSelectedCampaigns: (ids: string[]) => void;
-  setSelectedAdSets: (ids: string[]) => void;
-  setSelectedAds: (ids: string[]) => void;
-  setStatusFilters: (vals: string[]) => void;
-  setObjectiveFilters: (vals: string[]) => void;
-  setPlacementFilters: (vals: string[]) => void;
-  setAgeFilters: (vals: string[]) => void;
-  setGenderFilters: (vals: string[]) => void;
+  statusFilter: string;
+  setStatusFilter: (filter: string) => void;
+  isDirectorMode: boolean;
   setIsDirectorMode: (val: boolean) => void;
-  setAnnotation: (date: string, text: string) => void;
-  setCampaignTag: (campaignId: string, tags: string[]) => void;
-  updateCRMLead: (lead: CRMLead) => void;
-  setLastSync: (time: string) => void;
-  setIntelProductFilter: (val: string) => void;
-  setIntelCampaignFilter: (val: string) => void;
-  setIntelSignalFilter: (val: string) => void;
-  setHierarchy: (hierarchy: AccountHierarchy) => void;
-  // Optimistic hierarchy mutations
-  updateHierarchyCampaign: (id: string, patch: Partial<any>) => void;
-  updateHierarchyAdset: (id: string, patch: Partial<any>) => void;
-  updateHierarchyAd: (id: string, patch: Partial<any>) => void;
-  drawerCampaignId: string | null;
-  setDrawerCampaignId: (id: string | null) => void;
+  toggleDirectorMode: () => void;
+  isCompare: boolean;
+  setIsCompare: (val: boolean) => void;
+  theme: "light" | "dark";
+  setTheme: (theme: "light" | "dark") => void;
+  
+  // Auth
+  isAuthenticated: boolean;
+  setIsAuthenticated: (val: boolean) => void;
+  userEmail: string | null;
+  setUserEmail: (email: string | null) => void;
+  
+  // Date Range
+  customStart: string | null;
+  customEnd: string | null;
+  setCustomRange: (start: string | null, end: string | null) => void;
+  
+  // Selection
+  selectedCampaigns: string[];
+  setSelectedCampaigns: (ids: string[]) => void;
+  selectedAdSets: string[];
+  setSelectedAdSets: (ids: string[]) => void;
+  selectedAds: string[];
+  setSelectedAds: (ids: string[]) => void;
+  
+  // Filters
+  statusFilters: string[];
+  setStatusFilters: (filters: string[]) => void;
+  objectiveFilters: string[];
+  setObjectiveFilters: (filters: string[]) => void;
+  placementFilters: string[];
+  setPlacementFilters: (filters: string[]) => void;
+  
+  // Tokens & Config
+  metaToken: string | null;
+  setMetaToken: (token: string | null) => void;
+  googleToken: string | null;
+  setGoogleToken: (token: string | null) => void;
+  token: string | null; // Google generic token
+  setToken: (token: string | null) => void;
+  googleCustomerId: string | null;
+  setGoogleCustomerId: (id: string | null) => void;
+  accountId: string | null;
+  setAccountId: (id: string | null) => void;
+  geminiKey: string | null;
+  setGeminiKey: (key: string | null) => void;
+  
+  // Data
+  metaData: any[];
+  setMetaData: (data: any[]) => void;
+  metaAdsData: any[];
+  setMetaAdsData: (data: any[]) => void;
+  googleData: any;
+  setGoogleData: (data: any) => void;
+  hierarchy: any;
+  setHierarchy: (hierarchy: any) => void;
+  ageBreakdownA: any[];
+  setAgeBreakdownA: (data: any[]) => void;
+  genderBreakdownA: any[];
+  setGenderBreakdownA: (data: any[]) => void;
+  regionBreakdownA: any[];
+  setRegionBreakdownA: (data: any[]) => void;
+  
+  // Status
+  isLoading: boolean;
+  setLoading: (val: boolean) => void;
   apiError: string | null;
   setApiError: (err: string | null) => void;
-  theme: "dark" | "light";
-  setTheme: (theme: "dark" | "light") => void;
+  
+  // Hourly Data
+  hourlyDataA: any[];
+  setHourlyDataA: (data: any[]) => void;
+  hourlyDataB: any[];
+  setHourlyDataB: (data: any[]) => void;
+  
+  // CRM
+  crmLeads: any[];
+  setCRMLeads: (leads: any[]) => void;
+  updateCRMLead: (id: string, data: any) => void;
+  
+  // Backward compatibility
+  dataA: any[];
+  dataB: any[];
+  setDataA: (data: any[]) => void;
+  setDataB: (data: any[]) => void;
+  annotations: any[];
+  setAnnotations: (data: any[]) => void;
+  
+  // App specific state
+  setDrawerCampaignId: (id: string | null) => void;
+  drawerCampaignId: string | null;
+  creativesHD: Record<string, string>;
+  setCreativesHD: (data: Record<string, string>) => void;
+  lastSync: string | null;
+  setLastSync: (time: string | null) => void;
+
+  runRefresh: () => void;
   _hydrate: () => void;
+  
+  // Automation Rules
+  automationRules: AutomationRule[];
+  addRule: (rule: AutomationRule) => void;
+  removeRule: (id: string) => void;
+  toggleRule: (id: string) => void;
 }
 
-export const useAppStore = create<AppStore>()((set, get) => ({
-  // ── persisted defaults ──
-  token: "",
-  accountId: "",
-  geminiKey: "",
+export const useAppStore = create<AppState>()(
+  persist(
+    (set, get) => ({
+  period: "last_7d",
+  setPeriod: (period) => set({ period }),
+  userName: "juam",
+  setUserName: (userName) => set({ userName }),
+  searchQuery: "",
+  setSearchQuery: (searchQuery) => set({ searchQuery }),
+  statusFilter: "all",
+  setStatusFilter: (statusFilter) => set({ statusFilter }),
   isDirectorMode: false,
-  annotations: {},
-  campaignTags: {},
-  crmLeads: [],
-  selectedCampaigns: [],
-  selectedAdSets: [],
-  selectedAds: [],
-  statusFilters: [],
-  objectiveFilters: [],
-  placementFilters: [],
-  ageFilters: [],
-  genderFilters: [],
-
-  // ── session-only defaults ──
-  period: "last_30d",
-  customStart: "",
-  customEnd: "",
+  setIsDirectorMode: (isDirectorMode) => set({ isDirectorMode }),
+  toggleDirectorMode: () => set((state) => ({ isDirectorMode: !state.isDirectorMode })),
   isCompare: false,
+  setIsCompare: (isCompare) => set({ isCompare }),
+  theme: "dark",
+  setTheme: (theme) => set({ theme }),
+  
+  isAuthenticated: false,
+  setIsAuthenticated: (isAuthenticated) => set({ isAuthenticated }),
+  userEmail: null,
+  setUserEmail: (userEmail) => set({ userEmail }),
+  
+  customStart: null,
+  customEnd: null,
+  setCustomRange: (customStart, customEnd) => set({ customStart, customEnd }),
+  
+  selectedCampaigns: [],
+  setSelectedCampaigns: (selectedCampaigns) => set({ selectedCampaigns }),
+  selectedAdSets: [],
+  setSelectedAdSets: (selectedAdSets) => set({ selectedAdSets }),
+  selectedAds: [],
+  setSelectedAds: (selectedAds) => set({ selectedAds }),
+  
+  statusFilters: [],
+  setStatusFilters: (statusFilters) => set({ statusFilters }),
+  objectiveFilters: [],
+  setObjectiveFilters: (objectiveFilters) => set({ objectiveFilters }),
+  placementFilters: [],
+  setPlacementFilters: (placementFilters) => set({ placementFilters }),
+  
+  metaToken: null,
+  setMetaToken: (metaToken) => set({ metaToken }),
+  googleToken: null,
+  setGoogleToken: (googleToken) => set({ googleToken }),
+  token: null,
+  setToken: (token) => set({ token }),
+  googleCustomerId: null,
+  setGoogleCustomerId: (googleCustomerId) => set({ googleCustomerId }),
+  accountId: null,
+  setAccountId: (accountId) => set({ accountId }),
+  geminiKey: null,
+  setGeminiKey: (geminiKey) => set({ geminiKey }),
+  
+  metaData: [],
+  setMetaData: (metaData) => set({ metaData }),
+  metaAdsData: [],
+  setMetaAdsData: (metaAdsData) => set({ metaAdsData }),
+  googleData: [],
+  setGoogleData: (googleData) => set({ googleData }),
+  hierarchy: null,
+  setHierarchy: (hierarchy) => set({ hierarchy }),
+  ageBreakdownA: [],
+  setAgeBreakdownA: (ageBreakdownA) => set({ ageBreakdownA }),
+  genderBreakdownA: [],
+  setGenderBreakdownA: (genderBreakdownA) => set({ genderBreakdownA }),
+  regionBreakdownA: [],
+  setRegionBreakdownA: (regionBreakdownA) => set({ regionBreakdownA }),
+  
+  isLoading: false,
+  setLoading: (isLoading) => set({ isLoading }),
+  apiError: null,
+  setApiError: (apiError) => set({ apiError }),
+  
+  hourlyDataA: [],
+  setHourlyDataA: (hourlyDataA) => set({ hourlyDataA }),
+  hourlyDataB: [],
+  setHourlyDataB: (hourlyDataB) => set({ hourlyDataB }),
+  
+  crmLeads: [],
+  setCRMLeads: (crmLeads) => set({ crmLeads }),
+  updateCRMLead: (id, data) => set((state) => ({
+    crmLeads: state.crmLeads.map((l) => (l.id === id ? { ...l, ...data } : l))
+  })),
+  
   dataA: [],
   dataB: [],
-  dataAds: [],
-  hourlyDataA: [],
-  hourlyDataB: [],
-  ageBreakdownA: [],
-  genderBreakdownA: [],
-  placementBreakdownA: [],
-  regionBreakdownA: [],
-  biData: [],
-  searchQuery: "",
-  statusFilter: "all",
-  isLoading: false,
-  lastSync: null,
-  intelProductFilter: "all",
-  intelCampaignFilter: "all",
-  intelSignalFilter: "all",
-  hierarchy: null,
-  apiError: null,
+  setDataA: (dataA) => set({ dataA }),
+  setDataB: (dataB) => set({ dataB }),
+  annotations: [],
+  setAnnotations: (annotations) => set({ annotations }),
+  
   drawerCampaignId: null,
-  creativesHD: {},
-  theme: "dark",
-
-  // ── actions ──
-  setCreativesHD: (creativesHD) => set({ creativesHD }),
   setDrawerCampaignId: (drawerCampaignId) => set({ drawerCampaignId }),
-  setApiError: (apiError) => set({ apiError }),
-  setTheme: (theme) => {
-    set({ theme });
-    if (typeof document !== "undefined") {
-      document.documentElement.classList.toggle("light", theme === "light");
-    }
-    try { localStorage.setItem("tf-theme", theme); } catch {}
-  },
-  setToken: (token) => {
-    set({ token });
-    _save({ token });
-  },
-  setAccountId: (accountId) => {
-    set({ accountId });
-    _save({ accountId });
-  },
-  setGeminiKey: (geminiKey) => {
-    set({ geminiKey });
-    _save({ geminiKey });
-  },
-  setIsDirectorMode: (isDirectorMode) => {
-    set({ isDirectorMode });
-    _save({ isDirectorMode });
-  },
-  setAnnotation: (date, text) =>
-    set((s) => {
-      const annotations = { ...s.annotations, [date]: text };
-      _save({ annotations });
-      return { annotations };
-    }),
-  setCampaignTag: (campaignId, tags) =>
-    set((s) => {
-      const campaignTags = { ...s.campaignTags, [campaignId]: tags };
-      _save({ campaignTags });
-      return { campaignTags };
-    }),
-  updateCRMLead: (lead) =>
-    set((s) => {
-      const idx = s.crmLeads.findIndex((l) => l.lead_id === lead.lead_id);
-      const crmLeads = [...s.crmLeads];
-      if (idx > -1) crmLeads[idx] = lead; else crmLeads.push(lead);
-      _save({ crmLeads });
-      return { crmLeads };
-    }),
-  setPeriod: (period) => set({ period, customStart: "", customEnd: "" }),
-  setCustomRange: (customStart, customEnd) => set({ customStart, customEnd, period: "custom" }),
-  setIsCompare: (isCompare) => set({ isCompare }),
-  setLoading: (isLoading) => set({ isLoading }),
-  setData: (dataA, dataB = []) => set({ dataA, dataB }),
-  setDataAds: (dataAds) => set({ dataAds }),
-  setHourlyData: (hourlyDataA, hourlyDataB = []) => set({ hourlyDataA, hourlyDataB }),
-  setBreakdownData: (ageBreakdownA, genderBreakdownA, placementBreakdownA, regionBreakdownA = []) =>
-    set({ ageBreakdownA, genderBreakdownA, placementBreakdownA, regionBreakdownA }),
-  setBiData: (biData) => set({ biData }),
-  setSearchQuery: (searchQuery) => set({ searchQuery }),
-  setStatusFilter: (statusFilter) => set({ statusFilter }),
-  setSelectedCampaigns: (selectedCampaigns) => { set({ selectedCampaigns }); _save({ selectedCampaigns }); },
-  setSelectedAdSets: (selectedAdSets) => { set({ selectedAdSets }); _save({ selectedAdSets }); },
-  setSelectedAds: (selectedAds) => { set({ selectedAds }); _save({ selectedAds }); },
-  setStatusFilters: (statusFilters) => { set({ statusFilters }); _save({ statusFilters }); },
-  setObjectiveFilters: (objectiveFilters) => { set({ objectiveFilters }); _save({ objectiveFilters }); },
-  setPlacementFilters: (placementFilters) => { set({ placementFilters }); _save({ placementFilters }); },
-  setAgeFilters: (ageFilters) => { set({ ageFilters }); _save({ ageFilters }); },
-  setGenderFilters: (genderFilters) => { set({ genderFilters }); _save({ genderFilters }); },
+  creativesHD: {},
+  setCreativesHD: (creativesHD) => set({ creativesHD }),
+
+  lastSync: null,
   setLastSync: (lastSync) => set({ lastSync }),
-  setIntelProductFilter: (intelProductFilter) => set({ intelProductFilter }),
-  setIntelCampaignFilter: (intelCampaignFilter) => set({ intelCampaignFilter }),
-  setIntelSignalFilter: (intelSignalFilter) => set({ intelSignalFilter }),
-  setHierarchy: (hierarchy) => set({ hierarchy }),
-  updateHierarchyCampaign: (id, patch) =>
-    set((s) => {
-      if (!s.hierarchy) return {};
-      return {
-        hierarchy: {
-          ...s.hierarchy,
-          campaigns: s.hierarchy.campaigns.map(c => c.id === id ? { ...c, ...patch } : c),
-        },
-      };
-    }),
-  updateHierarchyAdset: (id, patch) =>
-    set((s) => {
-      if (!s.hierarchy) return {};
-      return {
-        hierarchy: {
-          ...s.hierarchy,
-          adsets: s.hierarchy.adsets.map(a => a.id === id ? { ...a, ...patch } : a),
-        },
-      };
-    }),
-  updateHierarchyAd: (id, patch) =>
-    set((s) => {
-      if (!s.hierarchy) return {};
-      return {
-        hierarchy: {
-          ...s.hierarchy,
-          ads: s.hierarchy.ads.map(a => a.id === id ? { ...a, ...patch } : a),
-        },
-      };
-    }),
 
-  // ── client-side hydration from localStorage ──
-  _hydrate: () => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const saved = JSON.parse(raw) as Partial<AppStore>;
-      const patch: Partial<AppStore> = {};
-      for (const key of PERSIST_KEYS) {
-        if (saved[key] !== undefined) (patch as any)[key] = saved[key];
-      }
-      if (Object.keys(patch).length > 0) set(patch as any);
-      // Note: runRefresh is called by StoreHydration after _hydrate completes
-    } catch {}
-    // Restore theme
-    try {
-      const savedTheme = localStorage.getItem("tf-theme") as "dark" | "light" | null;
-      if (savedTheme) {
-        set({ theme: savedTheme });
-        document.documentElement.classList.toggle("light", savedTheme === "light");
-      }
-    } catch {}
+  runRefresh: () => {
+    console.log("Sincronizando dados...");
   },
-}));
 
-// Save only persisted keys to localStorage
-function _save(patch: Partial<AppStore>) {
-  if (typeof window === "undefined") return;
-  try {
-    const current = useAppStore.getState();
-    const toSave: any = {};
-    for (const key of PERSIST_KEYS) toSave[key] = (current as any)[key];
-    Object.assign(toSave, patch);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-  } catch {}
+  _hydrate: () => {
+    console.log("Hydrating store...");
+  },
+
+  automationRules: [],
+  addRule: (rule) => set((state) => ({ automationRules: [...state.automationRules, rule] })),
+  removeRule: (id) => set((state) => ({ automationRules: state.automationRules.filter((r) => r.id !== id) })),
+  toggleRule: (id) => set((state) => ({
+    automationRules: state.automationRules.map((r) => r.id === id ? { ...r, enabled: !r.enabled } : r)
+  }))
+}),
+{
+  name: "trackfy-storage",
+  partialize: (state) => ({ 
+    automationRules: state.automationRules, 
+    theme: state.theme,
+    metaToken: state.metaToken,
+    googleToken: state.googleToken,
+    accountId: state.accountId
+  })
 }
+));

@@ -9,38 +9,40 @@ import {
   CONVERSATION_ACTION_TYPES
 } from "@/lib/formatters";
 import { calculateHealthScore } from "@/services/rulesEngine";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { 
   BarChart3, 
   Download, 
   ImageIcon,
+  Rocket,
+  Octagon
 } from "lucide-react";
-import { cn } from "@/components/ui/Button";
+import { safeArray } from "@/lib/safeArray";
 
 export function CampaignsTable() {
-  const { dataA, searchQuery, statusFilter, isDirectorMode, setDrawerCampaignId, creativesHD } = useAppStore();
+  const { metaData, searchQuery, statusFilter, isDirectorMode, setDrawerCampaignId, creativesHD } = useAppStore();
 
-  // ... (filterItem and campaignMap calculation remains same as above but with latest variables)
   const filterItem = (item: any) => {
-    const matchesSearch = (item.campaign_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (item.ad_name || "").toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (item.campaign_name || "").toLowerCase().includes((searchQuery || "").toLowerCase()) ||
+                          (item.ad_name || "").toLowerCase().includes((searchQuery || "").toLowerCase());
     
     const matchesStatus = statusFilter === "all" || 
-                          statusFilter === "active"; // Since we removed campaign_status, assume active if they have delivery in insights
+                          statusFilter === "active";
 
     return matchesSearch && matchesStatus;
   };
 
   const campaignMap: Record<string, any> = {};
-  dataA.forEach((r) => {
+  safeArray(metaData).forEach((r) => {
     if (!filterItem(r)) return;
     const id = r.campaign_id;
     if (!campaignMap[id]) {
       campaignMap[id] = {
         id,
         name: r.campaign_name,
-        status: "ACTIVE", // Default to active since we only fetch insights for delivered campaigns
+        status: "ACTIVE",
         spend: 0,
         imps: 0,
         clicks: 0,
@@ -60,22 +62,22 @@ export function CampaignsTable() {
     c.frequency = Math.max(c.frequency, parseFloat(r.frequency || "0"));
   });
 
-  const campaigns = Object.values(campaignMap).sort((a, b) => b.spend - a.spend);
+  const campaigns = Object.values(campaignMap).sort((a: any, b: any) => b.spend - a.spend);
 
-  const totalLeads = campaigns.reduce((sum, c) => sum + c.leads, 0);
-  const totalSpend = campaigns.reduce((sum, c) => sum + c.spend, 0);
+  const totalLeads = campaigns.reduce((sum, c: any) => sum + c.leads, 0);
+  const totalSpend = campaigns.reduce((sum, c: any) => sum + c.spend, 0);
   const avgCpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
 
   return (
-    <div className="glass overflow-hidden border-white/5 shadow-2xl">
+    <div className="glass overflow-hidden border-white/5 shadow-2xl rounded-2xl">
       <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
         <div className="flex items-center gap-3">
-          <BarChart3 className="w-5 h-5 text-accent" />
-          <h3 className="text-sm font-bold text-muted uppercase tracking-widest">
+          <BarChart3 className="w-5 h-5 text-primary" />
+          <h3 className="text-sm font-black text-foreground uppercase tracking-widest">
             {isDirectorMode ? "Resumo de Performance" : "Inteligência de Campanhas"}
           </h3>
         </div>
-        <Button variant="outline" size="sm" className="gap-2 font-bold h-8 text-[10px] border-white/5 hover:bg-white/5">
+        <Button variant="outline" size="sm" className="gap-2 font-black h-8 text-[10px] border-border bg-background hover:bg-muted uppercase tracking-widest">
           <Download className="w-3 h-3" />
           Exportar Relatório
         </Button>
@@ -83,27 +85,23 @@ export function CampaignsTable() {
 
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse whitespace-nowrap">
-          {/* Header */}
           <thead>
-            <tr className="border-b border-border bg-white/[0.02]">
-              <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted">Campanha & Status</th>
-              <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted">Ações Rápidas</th>
-              <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted text-right">Investido</th>
+            <tr className="border-b border-border bg-muted/30">
+              <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Campanha & Status</th>
+              {!isDirectorMode && <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Saúde (IA)</th>}
+              <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground text-right">Investido</th>
               {!isDirectorMode && (
                 <>
-                  <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted text-right">Imps / Freq</th>
-                  <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted text-right">Cliques / CTR</th>
+                  <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground text-right">CTR</th>
                 </>
               )}
-              <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted text-right">Leads / CPL</th>
-              <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted text-right">Conversas</th>
-              <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted text-center">Score (AI)</th>
+              <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground text-right">Leads / CPL</th>
+              <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground text-right">Ação Recomendada</th>
             </tr>
           </thead>
 
-          {/* Body */}
-          <tbody className="divide-y divide-white/[0.03]">
-            {campaigns.map((c) => {
+          <tbody className="divide-y divide-border">
+            {campaigns.map((c: any) => {
               const score = calculateHealthScore(c, avgCpl);
               const cpl = c.leads > 0 ? c.spend / c.leads : 0;
               const ctr = c.imps > 0 ? (c.clicks / c.imps) * 100 : 0;
@@ -114,52 +112,49 @@ export function CampaignsTable() {
               return (
                 <tr 
                   key={c.id} 
-                  className="group hover:bg-white/[0.02] transition-all cursor-pointer"
+                  className="group hover:bg-muted/30 transition-all cursor-pointer"
                   onClick={() => setDrawerCampaignId(c.id)}
                 >
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-background border border-border flex items-center justify-center overflow-hidden shrink-0 shadow-inner relative">
+                      <div className="w-10 h-10 rounded-lg bg-muted border border-border flex items-center justify-center overflow-hidden shrink-0 shadow-inner relative">
                         {creativesHD && creativesHD[c.id] ? (
                           <img src={creativesHD[c.id]} alt="" className="w-full h-full object-cover" />
                         ) : (
-                          <ImageIcon className="w-4 h-4 text-muted/30" />
+                          <ImageIcon className="w-4 h-4 text-muted-foreground/30" />
                         )}
                         {isScaling && (
-                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-success rounded-full flex items-center justify-center border-2 border-background animate-bounce">
-                             <span className="text-[8px]">🚀</span>
-                          </div>
-                        )}
-                        {isStopLoss && (
-                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-danger rounded-full flex items-center justify-center border-2 border-background">
-                             <span className="text-[8px]">🛑</span>
+                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center border-2 border-background animate-bounce">
+                             <Rocket className="w-2.5 h-2.5 text-white" />
                           </div>
                         )}
                       </div>
                       <div className="flex flex-col min-w-0">
-                        <span className="text-sm font-bold truncate group-hover:text-accent transition-colors">{c.name}</span>
-                        <span className="text-[10px] text-muted tabular-nums uppercase tracking-tighter">
+                        <span className="text-sm font-black truncate group-hover:text-primary transition-colors uppercase tracking-tight">{c.name}</span>
+                        <div className="flex items-center gap-2 mt-0.5">
                            {c.status === "ACTIVE" ? (
-                             <span className="text-success flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-success"/> Ativa</span>
+                             <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-1">
+                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"/> Ativa
+                             </span>
                            ) : (
-                             <span className="text-muted flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-muted"/> Pausada</span>
+                             <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                               <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground"/> Pausada
+                             </span>
                            )}
-                        </span>
+                        </div>
                       </div>
                     </div>
                   </td>
                   {!isDirectorMode && (
                     <td className="px-6 py-5">
                       <div className="flex flex-col gap-1.5 w-24">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold mono">{score}/100</span>
-                        </div>
-                        <div className="h-1 w-full bg-background rounded-full overflow-hidden border border-white/5">
+                        <span className="text-[10px] font-black uppercase tracking-widest">{score}/100</span>
+                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                           <div 
                             className={cn(
                               "h-full rounded-full transition-all duration-1000",
-                              score > 80 ? "bg-success shadow-[0_0_8px_rgba(16,185,129,0.3)]" : 
-                              score > 50 ? "bg-warning shadow-[0_0_8px_rgba(245,158,11,0.3)]" : "bg-danger shadow-[0_0_8px_rgba(239,68,68,0.3)]"
+                              score > 80 ? "bg-emerald-500" : 
+                              score > 50 ? "bg-amber-500" : "bg-rose-500"
                             )} 
                             style={{ width: `${score}%` }} 
                           />
@@ -167,31 +162,28 @@ export function CampaignsTable() {
                       </div>
                     </td>
                   )}
-                  <td className="px-6 py-5 text-sm font-bold mono tabular-nums">{formatCurrency(c.spend)}</td>
-                  {!isDirectorMode && <td className="px-6 py-4 text-sm font-bold mono tabular-nums text-muted">{ctr.toFixed(2)}%</td>}
-                  <td className="px-6 py-5">
+                  <td className="px-6 py-5 text-xs font-black tabular-nums text-right">{formatCurrency(c.spend)}</td>
+                  {!isDirectorMode && <td className="px-6 py-4 text-xs font-black tabular-nums text-muted-foreground text-right">{ctr.toFixed(2)}%</td>}
+                  <td className="px-6 py-5 text-right">
                     <div className="flex flex-col">
-                      <span className="text-sm font-bold text-accent mono tabular-nums">{c.leads}</span>
-                      {!isDirectorMode && <span className="text-[10px] text-muted font-medium">{c.convs} Conv.</span>}
+                      <span className="text-xs font-black text-primary tabular-nums">{c.leads} Leads</span>
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase">{formatCurrency(cpl)} / CPL</span>
                     </div>
-                  </td>
-                  <td className="px-6 py-5 text-sm font-bold mono tabular-nums">
-                    <span className={avgCpl > 0 && cpl > avgCpl ? "text-danger" : "text-success"}>{formatCurrency(cpl)}</span>
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex items-center justify-end gap-2">
                        {isScaling && (
-                         <div className="px-2 py-1 bg-success/10 text-success text-[10px] font-bold rounded border border-success/20 uppercase animate-in zoom-in duration-500">
+                         <Badge className="bg-emerald-500/10 text-emerald-500 border-none text-[9px] font-black uppercase tracking-widest">
                            Escalar
-                         </div>
+                         </Badge>
                        )}
                        {isStopLoss && (
-                         <div className="px-2 py-1 bg-danger/10 text-danger text-[10px] font-bold rounded border border-danger/20 uppercase animate-in shake duration-500">
+                         <Badge className="bg-rose-500/10 text-rose-500 border-none text-[9px] font-black uppercase tracking-widest">
                            Pausar
-                         </div>
+                         </Badge>
                        )}
                        {!isScaling && !isStopLoss && (
-                         <span className="text-[9px] text-muted font-bold uppercase italic">Manter</span>
+                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-30 italic">Manter</span>
                        )}
                     </div>
                   </td>
@@ -201,8 +193,9 @@ export function CampaignsTable() {
           </tbody>
         </table>
         {campaigns.length === 0 && (
-          <div className="py-20 text-center">
-            <p className="text-sm text-muted font-bold">Nenhuma campanha encontrada para este período.</p>
+          <div className="py-20 text-center space-y-3 opacity-30">
+            <BarChart3 className="w-10 h-10 mx-auto text-muted-foreground" />
+            <p className="text-xs font-black uppercase tracking-widest">Nenhuma campanha encontrada.</p>
           </div>
         )}
       </div>

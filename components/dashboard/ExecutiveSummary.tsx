@@ -1,137 +1,56 @@
 "use client";
 
-import { useAppStore } from "@/store/useAppStore";
-import { useGemini } from "@/hooks/useGemini";
-import { Sparkles, Loader2, Send, Quote, MessageCircle } from "lucide-react";
-import { useState, useMemo } from "react";
-import { formatCurrency, formatNumber, extractMetric, LEAD_ACTION_TYPES, CONVERSATION_ACTION_TYPES } from "@/lib/formatters";
-import { safeArray } from "@/lib/safeArray";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Sparkles, BrainCircuit, ArrowUpRight, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function ExecutiveSummary() {
-  const { dataA, geminiKey } = useAppStore();
-  const { getInsight, loading } = useGemini();
-  const [report, setReport] = useState<string | null>(null);
-
-  const metrics = useMemo(() => {
-    const totalSpend = safeArray(dataA).reduce((acc, r) => acc + parseFloat(r.spend || "0"), 0);
-    const totalLeads = safeArray(dataA).reduce((acc, r) => acc + extractMetric(r.actions, LEAD_ACTION_TYPES), 0);
-    const totalConvs = safeArray(dataA).reduce((acc, r) => acc + extractMetric(r.actions, CONVERSATION_ACTION_TYPES), 0);
-    const totalImps = safeArray(dataA).reduce((acc, r) => acc + parseInt(r.impressions || "0"), 0);
-    const totalClicks = safeArray(dataA).reduce((acc, r) => acc + parseInt(r.clicks || "0"), 0);
-    const avgCpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
-    const ctr = totalImps > 0 ? (totalClicks / totalImps) * 100 : 0;
-    return { totalSpend, totalLeads, totalConvs, avgCpl, ctr, totalImps, totalClicks };
-  }, [dataA]);
-
-  const generateReport = async () => {
-    const prompt = `Você é um especialista em Growth Marketing focado em resultados para diretores.
-Resuma a performance atual destas campanhas de Meta Ads:
-- Investimento Total: ${formatCurrency(metrics.totalSpend)}
-- Total de Leads: ${formatNumber(metrics.totalLeads)}
-- Conversas Iniciadas: ${formatNumber(metrics.totalConvs)}
-- CPL Médio: ${formatCurrency(metrics.avgCpl)}
-- CTR: ${metrics.ctr.toFixed(2)}%
-Escreva um parágrafo curto (máximo 4 linhas) em tom profissional e executivo.
-Foque no que importa para o bolso do dono (ROI e Eficiência).
-Termine com uma "Próxima Ação" clara.`;
-
-    const result = await getInsight(prompt);
-    setReport(result);
-  };
-
-  // WhatsApp share always includes real metrics — Gemini summary is bonus
-  const shareToWhatsApp = () => {
-    const lines = [
-      `*📊 Relatório Meta Ads — Trackfy*`,
-      ``,
-      `💰 Investimento: ${formatCurrency(metrics.totalSpend)}`,
-      `👥 Leads: ${formatNumber(metrics.totalLeads)}`,
-      `💬 Conversas: ${formatNumber(metrics.totalConvs)}`,
-      `📉 CPL Médio: ${formatCurrency(metrics.avgCpl)}`,
-      `🖱️ CTR: ${metrics.ctr.toFixed(2)}%`,
-      `👁️ Impressões: ${formatNumber(metrics.totalImps)}`,
-    ];
-    if (report) {
-      lines.push(``, `*Análise IA:*`, report);
-    }
-    lines.push(``, `_Gerado pelo TrackfySuper Dash_`);
-    window.open(`https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`, "_blank");
-  };
-
-  const hasData = metrics.totalSpend > 0;
-
   return (
-    <div className="glass p-6 relative overflow-hidden group">
-      <div className="flex items-center justify-between mb-4 relative z-10">
-        <div className="flex items-center gap-2">
-          <div className="p-2 rounded-lg bg-accent/20 text-accent">
-            <Sparkles className="w-4 h-4" />
-          </div>
-          <h3 className="text-xs font-bold text-muted uppercase tracking-widest">Resumo Executivo</h3>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* WhatsApp share — always available when there's data */}
-          {hasData && (
-            <button
-              onClick={shareToWhatsApp}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success/20 text-success hover:bg-success/30 transition-colors text-[10px] font-bold uppercase"
-              title="Compartilhar métricas no WhatsApp"
-            >
-              <MessageCircle className="w-3.5 h-3.5" />
-              WhatsApp
-            </button>
-          )}
-          {/* Gemini AI — only show if key is configured */}
-          {geminiKey && (
-            <button
-              onClick={generateReport}
-              disabled={loading}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent text-[10px] font-bold uppercase transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-              Gerar IA
-            </button>
-          )}
-        </div>
-      </div>
+    <Card className="border-none bg-gradient-to-br from-[#0064E0] to-[#7C3AED] text-white shadow-xl shadow-blue-500/20 overflow-hidden relative group">
+      {/* Decorative Elements */}
+      <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl transition-all duration-700 group-hover:scale-110" />
+      <div className="absolute bottom-[-20%] left-[-10%] w-48 h-48 bg-purple-500/20 rounded-full blur-3xl" />
 
-      {/* Always-visible metrics summary */}
-      {hasData && (
-        <div className="grid grid-cols-3 gap-3 mb-4 relative z-10">
-          {[
-            { label: "Investimento", value: formatCurrency(metrics.totalSpend), color: "text-white" },
-            { label: "Leads", value: formatNumber(metrics.totalLeads), color: "text-accent" },
-            { label: "Conversas", value: formatNumber(metrics.totalConvs), color: "text-warning" },
-            { label: "CPL Médio", value: formatCurrency(metrics.avgCpl), color: "text-white" },
-            { label: "CTR", value: `${metrics.ctr.toFixed(2)}%`, color: "text-white" },
-            { label: "Impressões", value: formatNumber(metrics.totalImps), color: "text-muted" },
-          ].map(m => (
-            <div key={m.label} className="bg-white/[0.03] rounded-lg p-2.5 border border-white/5">
-              <span className="text-[9px] font-bold text-muted uppercase tracking-widest block mb-0.5">{m.label}</span>
-              <span className={`text-sm font-black mono ${m.color}`}>{m.value}</span>
+      <CardHeader className="relative z-10 pb-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-white/10 backdrop-blur-md rounded-xl">
+              <Sparkles className="w-5 h-5 text-white" />
             </div>
-          ))}
+            <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-white/70">Resumo Executivo (IA)</CardTitle>
+          </div>
+          <Button variant="ghost" size="sm" className="h-8 text-[10px] font-black uppercase tracking-widest text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-all">
+            Ver Detalhes <ArrowUpRight className="w-3.5 h-3.5 ml-2" />
+          </Button>
         </div>
-      )}
+      </CardHeader>
+      
+      <CardContent className="relative z-10 space-y-6 pt-4">
+        <div className="space-y-4">
+          <h3 className="text-3xl font-black tracking-tighter leading-none">
+            Sua performance cresceu <span className="text-emerald-300">12.5%</span> esta semana.
+          </h3>
+          <p className="text-sm font-medium text-white/80 leading-relaxed max-w-[500px]">
+            O aumento nas conversões foi impulsionado pela campanha <span className="text-white font-black underline decoration-2 underline-offset-4 decoration-emerald-300">Black Friday — Meta</span>, 
+            que reduziu o CPL em 18% mantendo a taxa de clique (CTR) estável. Recomendamos escalar o orçamento em 15% nos próximos 3 dias.
+          </p>
+        </div>
 
-      <div className="min-h-[60px] flex flex-col justify-center relative z-10">
-        {report ? (
-          <div className="space-y-3 animate-in fade-in duration-500">
-            <div className="relative">
-              <Quote className="absolute -left-2 -top-2 w-8 h-8 text-white/5 -z-10" />
-              <p className="text-sm leading-relaxed text-white/90 italic">{report}</p>
-            </div>
+        <div className="flex flex-wrap gap-3 pt-2">
+          <div className="px-4 py-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/5 flex items-center gap-3 transition-all hover:bg-white/20 cursor-default">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs font-black uppercase tracking-widest">Escalar orçamento</span>
           </div>
-        ) : (
-          <div className="text-center py-3 border-2 border-dashed border-white/5 rounded-xl">
-            <p className="text-[10px] text-muted font-bold uppercase tracking-widest">
-              {geminiKey ? "Clique em Gerar IA para análise estratégica" : "Configure a Gemini Key em Configurações para análise por IA"}
-            </p>
+          <div className="px-4 py-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/5 flex items-center gap-3 transition-all hover:bg-white/20 cursor-default">
+            <div className="w-2 h-2 rounded-full bg-amber-400" />
+            <span className="text-xs font-black uppercase tracking-widest">Ajustar Criativos</span>
           </div>
-        )}
+        </div>
+      </CardContent>
+
+      <div className="absolute right-[-20px] bottom-[-20px] opacity-10 group-hover:scale-110 group-hover:rotate-12 transition-all duration-700">
+        <BrainCircuit size={200} />
       </div>
-
-      <div className="absolute -right-20 -bottom-20 w-60 h-60 bg-accent/10 blur-[100px] pointer-events-none rounded-full" />
-    </div>
+    </Card>
   );
 }

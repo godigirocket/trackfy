@@ -21,48 +21,12 @@ interface SummaryProps {
 
 export function SummaryCards({ summary }: SummaryProps) {
   const cards = [
-    { 
-      label: "Investimento Total", 
-      value: formatCurrency(summary.totalSpend), 
-      icon: DollarSign, 
-      color: "text-white",
-      bg: "bg-white/10"
-    },
-    { 
-      label: "CPL Médio Geral", 
-      value: formatCurrency(summary.avgCpl), 
-      icon: Target, 
-      color: "text-accent",
-      bg: "bg-accent/10"
-    },
-    { 
-      label: "Conversas/Leads", 
-      value: (summary.totalLeads > 0 ? summary.totalLeads : summary.totalConversations).toLocaleString("pt-BR"), 
-      icon: Users, 
-      color: "text-success",
-      bg: "bg-success/10"
-    },
-    { 
-      label: "Conversas Iniciadas", 
-      value: summary.totalConversations.toLocaleString("pt-BR"), 
-      icon: MessageCircle, 
-      color: "text-warning",
-      bg: "bg-warning/10"
-    },
-    { 
-      label: "Campanhas Escalar 🟢", 
-      value: summary.scalable.toString(), 
-      icon: TrendingUp, 
-      color: "text-success",
-      bg: "bg-success/5 border border-success/20"
-    },
-    { 
-      label: "Atenção / Corte 🔴", 
-      value: summary.needsAttention.toString(), 
-      icon: AlertCircle, 
-      color: "text-danger",
-      bg: "bg-danger/5 border border-danger/20"
-    },
+    { label: "INVESTIMENTO TOTAL", value: formatCurrency(summary.totalSpend), icon: DollarSign },
+    { label: "CPL MÉDIO GERAL", value: formatCurrency(summary.avgCpl), icon: Target },
+    { label: "CONVERSAS/LEADS", value: (summary.totalLeads > 0 ? summary.totalLeads : summary.totalConversations).toLocaleString("pt-BR"), icon: Users },
+    { label: "CONVERSAS INICIADAS", value: summary.totalConversations.toLocaleString("pt-BR"), icon: MessageCircle },
+    { label: "CAMPANHAS ESCALAR 🟢", value: summary.scalable.toString(), icon: TrendingUp },
+    { label: "ATENÇÃO / CORTE 🔴", value: summary.needsAttention.toString(), icon: AlertCircle },
   ];
 
   return (
@@ -70,19 +34,16 @@ export function SummaryCards({ summary }: SummaryProps) {
       {cards.map((card) => (
         <div 
           key={card.label} 
-          className={cn(
-            "glass p-5 flex flex-col gap-3 group transition-all hover:scale-[1.03] hover:bg-white/[0.04]",
-            card.bg
-          )}
+          className="bg-card border border-white/5 rounded-xl p-5 flex flex-col gap-4 group transition-all hover:border-white/10"
         >
-          <div className={cn("p-2 w-fit rounded-lg shadow-sm border border-white/10", card.bg)}>
-            <card.icon className={cn("w-4 h-4", card.color)} />
+          <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-accent/10">
+            <card.icon className="w-4 h-4 text-accent" />
           </div>
-          <div className="flex flex-col gap-0.5">
-            <span className={cn("text-lg font-black mono tracking-tight", card.color)}>
+          <div className="flex flex-col gap-1">
+            <span className="text-2xl font-bold text-white tracking-tight">
               {card.value}
             </span>
-            <span className="text-[10px] font-bold text-muted uppercase tracking-widest leading-none">
+            <span className="text-[12px] font-medium text-muted uppercase tracking-wide">
               {card.label}
             </span>
           </div>
