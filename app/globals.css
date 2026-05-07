@@ -25,19 +25,13 @@
     --ring: 263.4 70% 50.4%;
     --radius: 0.75rem;
   }
-
-  /* Obsidian Mode Override */
   .dark {
-    --background: 240 25% 4%; /* #0F0F1A aprox */
-    --card: 240 25% 8%;       /* #1A1A2E aprox */
-    --border: 240 25% 12%;
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
     --primary: 263.4 70% 50.4%;
-  }
-}
-
-@layer base {
-  * {
-    border-color: hsl(var(--border));
   }
   body {
     background-color: hsl(var(--background));
@@ -45,10 +39,11 @@
   }
 }
 
-.gradient-text {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-indigo-500 font-black;
-}
-
-.enterprise-shadow {
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+@layer components {
+  .gradient-text {
+    @apply bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent;
+  }
+  .btn-premium {
+    @apply px-4 py-2 rounded-xl font-medium bg-primary text-primary-foreground hover:opacity-90 transition;
+  }
 }

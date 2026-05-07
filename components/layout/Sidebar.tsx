@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Link2, Layout, DollarSign, ChevronDown } from "lucide-react";
+import { LayoutDashboard, Link2, Layout, Image, DollarSign, ChevronDown } from "lucide-react";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
 
 const navItems = [
   {
@@ -52,16 +51,15 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-64 bg-card border-r border-border flex flex-col h-screen sticky top-0 overflow-hidden">
+    <aside className="w-64 bg-card border-r border-border flex flex-col">
       <div className="p-6">
-        <h1 className="text-xl font-bold gradient-text tracking-tighter">TRACKFY</h1>
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 leading-none">ENTERPRISE TRACKING</p>
+        <h1 className="text-xl font-bold gradient-text">TRACKIFY</h1>
+        <p className="text-xs text-muted-foreground">ENTERPRISE TRACKING</p>
       </div>
-      
-      <nav className="flex-1 px-4 space-y-8 overflow-y-auto custom-scrollbar">
+      <nav className="flex-1 px-4 space-y-6">
         {navItems.map((section) => (
           <div key={section.category}>
-            <div className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-[0.2em] mb-4 px-3">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               {section.category}
             </div>
             <div className="space-y-1">
@@ -71,36 +69,29 @@ export function Sidebar() {
                     <>
                       <button
                         onClick={() => toggleMenu(item.name)}
-                        className={cn(
-                          "w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 uppercase tracking-widest group",
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
                           pathname.startsWith(item.subitems[0].href) || openMenus[item.name]
-                            ? "bg-primary/10 text-primary"
-                            : "text-muted-foreground/60 hover:bg-white/5 hover:text-white"
-                        )}
+                            ? "bg-primary/20 text-primary"
+                            : "hover:bg-white/5"
+                        }`}
                       >
                         <div className="flex items-center gap-2">
                           <item.icon className="w-4 h-4" />
                           <span>{item.name}</span>
                         </div>
-                        <ChevronDown
-                          className={cn(
-                            "w-4 h-4 transition-transform duration-300",
-                            openMenus[item.name] ? "rotate-180" : ""
-                          )}
-                        />
+                        <ChevronDown className={`w-4 h-4 transition-transform ${openMenus[item.name] ? "rotate-180" : ""}`} />
                       </button>
                       {openMenus[item.name] && (
-                        <div className="ml-6 mt-1 space-y-1 border-l border-white/5 pl-2">
+                        <div className="ml-6 mt-1 space-y-1">
                           {item.subitems.map((sub) => (
                             <Link
                               key={sub.href}
                               href={sub.href}
-                              className={cn(
-                                "block px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all",
+                              className={`block px-3 py-1.5 rounded-lg text-sm ${
                                 pathname === sub.href
-                                  ? "text-primary"
-                                  : "text-muted-foreground/40 hover:text-white"
-                              )}
+                                  ? "bg-primary/20 text-primary"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                              }`}
                             >
                               {sub.name}
                             </Link>
@@ -111,12 +102,11 @@ export function Sidebar() {
                   ) : (
                     <Link
                       href={item.href}
-                      className={cn(
-                        "flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 uppercase tracking-widest",
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
                         pathname === item.href
-                          ? "bg-primary/10 text-primary shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)]"
-                          : "text-muted-foreground/60 hover:bg-white/5 hover:text-white"
-                      )}
+                          ? "bg-primary/20 text-primary"
+                          : "hover:bg-white/5"
+                      }`}
                     >
                       <item.icon className="w-4 h-4" />
                       <span>{item.name}</span>
@@ -128,12 +118,8 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
-      
-      <div className="p-6 border-t border-border">
-        <div className="text-[10px] font-black text-primary uppercase tracking-[0.2em] flex items-center gap-2">
-           <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-           PREMIUM PLAN
-        </div>
+      <div className="p-4 border-t border-border">
+        <div className="text-xs text-muted-foreground">PREMIUM PLAN</div>
       </div>
     </aside>
   );
