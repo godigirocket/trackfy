@@ -6,6 +6,8 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Desativa a exportação estática problemática para caminhos que estão quebrando
+  output: 'standalone',
 };
 
 module.exports = nextConfig;

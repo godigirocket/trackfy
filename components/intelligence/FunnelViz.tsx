@@ -6,8 +6,13 @@ import { Layers, Activity, ChevronRight, MousePointer2, UserCheck, MessageSquare
 import { cn } from "@/lib/utils";
 
 export function FunnelViz({ intel = [] }: { intel: any[] }) {
+  const [mounted, setMounted] = (require("react")).useState(false);
+  (require("react")).useEffect(() => setMounted(true), []);
+
   const topCampaigns = intel.slice(0, 5);
-  const maxImp = Math.max(...topCampaigns.map(c => c.impressions), 1);
+  const maxImp = Math.max(...topCampaigns.map(c => c.impressions || 0), 1);
+
+  if (!mounted) return <div className="glass h-[400px] animate-pulse" />;
 
   return (
     <div className="glass p-8 animate-in fade-in slide-in-from-bottom-4 duration-700">

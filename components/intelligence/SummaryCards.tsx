@@ -29,6 +29,11 @@ const DEFAULT_SUMMARY = {
 };
 
 export function SummaryCards({ summary = DEFAULT_SUMMARY }: SummaryProps) {
+  const [mounted, setMounted] = (require("react")).useState(false);
+  (require("react")).useEffect(() => setMounted(true), []);
+
+  if (!mounted) return <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 h-24 bg-white/5 animate-pulse rounded-xl" />;
+
   const cards = [
     { label: "INVESTIMENTO TOTAL", value: formatCurrency(summary?.totalSpend || 0), icon: DollarSign },
     { label: "CPL MÉDIO GERAL", value: formatCurrency(summary?.avgCpl || 0), icon: Target },
