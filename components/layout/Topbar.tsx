@@ -1,81 +1,65 @@
 "use client";
 
+import { useAppStore } from "@/store/useAppStore";
+import { RefreshCw, User, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { 
-  Bell, 
-  Search, 
-  Sun, 
-  Moon, 
-  User, 
-  ChevronDown,
-  Layout,
-  Trophy,
-  ExternalLink
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
-import { useTheme } from "next-themes";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+
+const periods = [
+  { label: "HOJE", value: "today" },
+  { label: "ONTEM", value: "yesterday" },
+  { label: "7D", value: "last_7d" },
+  { label: "30D", value: "last_30d" },
+  { label: "MÁXIMO", value: "maximum" },
+];
 
 export function Topbar() {
-  const { theme, setTheme } = useTheme();
+  const { period, setPeriod, isLoading } = useAppStore();
 
   return (
-    <header className="h-16 border-b border-gray-100 bg-white flex items-center justify-between px-8 sticky top-0 z-50">
-      {/* Page Title & Icons */}
-      <div className="flex items-center gap-4">
-        <h2 className="text-sm font-bold text-gray-700 tracking-tight">Dashboard - Principal</h2>
-        <div className="flex items-center gap-3">
-           <button className="text-gray-400 hover:text-gray-600 transition-colors">
-              <Sun size={16} />
-           </button>
-           <button className="text-gray-400 hover:text-gray-600 transition-colors">
-              <Layout size={16} />
-           </button>
-           <button className="text-gray-400 hover:text-gray-600 transition-colors">
-              <ExternalLink size={16} />
-           </button>
-        </div>
+    <header className="h-20 border-b border-border flex items-center justify-between px-8 bg-card/50 backdrop-blur-md sticky top-0 z-50">
+      <div className="flex gap-1 bg-black/40 rounded-full p-1.5 border border-white/5 shadow-inner">
+        {periods.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => setPeriod(p.value as any)}
+            className={cn(
+              "px-5 py-2 text-[10px] font-black rounded-full transition-all duration-300 uppercase tracking-widest",
+              period === p.value
+                ? "bg-primary text-white shadow-[0_0_15px_-2px_rgba(168,85,247,0.6)]"
+                : "text-muted-foreground/60 hover:text-white"
+            )}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
-
-      {/* User Actions */}
-      <div className="flex items-center gap-6">
-        {/* Language */}
-        <div className="flex items-center gap-1.5 cursor-pointer">
-           <div className="w-5 h-4 bg-green-600 rounded-sm relative overflow-hidden flex items-center justify-center">
-              <div className="w-2 h-2 bg-yellow-400 rotate-45" />
-           </div>
-           <span className="text-[10px] font-black text-gray-400 uppercase">PT-BR</span>
-           <ChevronDown size={12} className="text-gray-400" />
-        </div>
-
-        {/* Awards */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-100">
-           <Trophy size={14} className="text-blue-600" />
-           <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Prêmios</span>
-           <div className="h-4 w-[1px] bg-blue-200 mx-1" />
-           <span className="text-[10px] font-bold text-gray-500 uppercase">R$ 0,00 / R$ 1M</span>
-        </div>
-
-        {/* User Profile */}
-        <div className="flex items-center gap-3 pl-4 border-l border-gray-100">
-          <div className="flex flex-col items-end leading-none">
-             <span className="text-xs font-black text-gray-700">Juan S T Gonz</span>
-             <span className="text-[10px] font-bold text-gray-400 uppercase">Usuário</span>
-          </div>
-          <div className="relative">
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">
-              JG
+      
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => window.location.reload()}
+          className={cn(
+            "p-2.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 transition-all group",
+            isLoading ? "opacity-50" : ""
+          )}
+        >
+          <RefreshCw className={cn("w-4 h-4 text-muted-foreground group-hover:text-white", isLoading ? "animate-spin" : "")} />
+        </button>
+        
+        <div className="h-8 w-px bg-white/5 mx-2" />
+        
+        <Link 
+            href="/settings"
+            className="flex items-center gap-3 pl-4 group transition-all"
+        >
+            <div className="flex flex-col items-end leading-none">
+                <span className="text-xs font-black text-white group-hover:text-primary transition-colors">Juam Silva</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase">Administrator</span>
             </div>
-            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />
-          </div>
-        </div>
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-indigo-500/20 border border-white/10 flex items-center justify-center group-hover:border-primary/50 transition-all overflow-hidden">
+                <User className="w-5 h-5 text-muted-foreground group-hover:text-primary" />
+            </div>
+        </Link>
       </div>
     </header>
   );
