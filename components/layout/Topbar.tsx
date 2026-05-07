@@ -1,107 +1,81 @@
 "use client";
 
-import { ThemeToggle } from "@/components/layout/ThemeToggle";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Bell, RefreshCw, Calendar as CalendarIcon } from "lucide-react";
-import { NotificationBell } from "@/components/notifications/NotificationBell";
-import { TokenManager } from "@/components/layout/TokenManager";
-import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { 
+  Bell, 
+  Search, 
+  Sun, 
+  Moon, 
+  User, 
+  ChevronDown,
+  Layout,
+  Trophy,
+  ExternalLink
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
+import { useTheme } from "next-themes";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 
 export function Topbar() {
-  const { period, setPeriod, userName } = useAppStore();
-
-  const periods = [
-    { label: "Hoje", value: "today" },
-    { label: "Ontem", value: "yesterday" },
-    { label: "7D", value: "last_7d" },
-    { label: "30D", value: "last_30d" },
-    { label: "Máximo", value: "maximum" },
-  ];
+  const { theme, setTheme } = useTheme();
 
   return (
-    <header className="h-16 glass border-b border-border flex items-center justify-between px-6 sticky top-0 z-20">
-      <div className="flex items-center gap-6">
-        <div className="flex bg-muted/50 p-1 rounded-xl border border-border">
-          {periods.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
-              className={cn(
-                "px-4 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
-                period === p.value 
-                  ? "bg-background text-primary shadow-sm" 
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
+    <header className="h-16 border-b border-gray-100 bg-white flex items-center justify-between px-8 sticky top-0 z-50">
+      {/* Page Title & Icons */}
+      <div className="flex items-center gap-4">
+        <h2 className="text-sm font-bold text-gray-700 tracking-tight">Dashboard - Principal</h2>
+        <div className="flex items-center gap-3">
+           <button className="text-gray-400 hover:text-gray-600 transition-colors">
+              <Sun size={16} />
+           </button>
+           <button className="text-gray-400 hover:text-gray-600 transition-colors">
+              <Layout size={16} />
+           </button>
+           <button className="text-gray-400 hover:text-gray-600 transition-colors">
+              <ExternalLink size={16} />
+           </button>
         </div>
-
-        <div className="h-6 w-[1px] bg-border mx-2" />
-
-        <Button variant="outline" size="sm" className="h-9 gap-2 text-[10px] font-black uppercase tracking-widest rounded-xl border-border bg-background">
-          <RefreshCw className="w-3.5 h-3.5" />
-          Sincronizar
-        </Button>
-        
-        <TokenManager />
       </div>
 
-      <div className="flex items-center gap-4">
-        <NotificationBell />
+      {/* User Actions */}
+      <div className="flex items-center gap-6">
+        {/* Language */}
+        <div className="flex items-center gap-1.5 cursor-pointer">
+           <div className="w-5 h-4 bg-green-600 rounded-sm relative overflow-hidden flex items-center justify-center">
+              <div className="w-2 h-2 bg-yellow-400 rotate-45" />
+           </div>
+           <span className="text-[10px] font-black text-gray-400 uppercase">PT-BR</span>
+           <ChevronDown size={12} className="text-gray-400" />
+        </div>
 
-        <ThemeToggle />
+        {/* Awards */}
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-100">
+           <Trophy size={14} className="text-blue-600" />
+           <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Prêmios</span>
+           <div className="h-4 w-[1px] bg-blue-200 mx-1" />
+           <span className="text-[10px] font-bold text-gray-500 uppercase">R$ 0,00 / R$ 1M</span>
+        </div>
 
-        <div className="h-6 w-[1px] bg-border mx-1" />
-
-        <DropdownMenu>
-          <DropdownMenuTrigger className="relative h-9 flex items-center gap-3 pl-1 pr-3 rounded-full border border-border hover:bg-muted transition-all text-sm font-medium">
-              <Avatar className="h-7 w-7 border border-border">
-                <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-black">
-                  {userName?.substring(0, 2).toUpperCase() || "JU"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="text-left hidden md:block">
-                <p className="text-[10px] font-black tracking-tight">{userName}</p>
-                <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest">Admin</p>
-              </div>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56 border-border bg-card" align="end">
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-bold leading-none">{userName}</p>
-                <p className="text-xs leading-none text-muted-foreground uppercase tracking-widest mt-1">
-                  juam.premium@trackfy.io
-                </p>
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-xs font-bold uppercase tracking-widest">Meu Perfil</DropdownMenuItem>
-            <DropdownMenuItem className="text-xs font-bold uppercase tracking-widest">Configurações</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive font-black text-xs uppercase tracking-widest">
-              Sair
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* User Profile */}
+        <div className="flex items-center gap-3 pl-4 border-l border-gray-100">
+          <div className="flex flex-col items-end leading-none">
+             <span className="text-xs font-black text-gray-700">Juan S T Gonz</span>
+             <span className="text-[10px] font-bold text-gray-400 uppercase">Usuário</span>
+          </div>
+          <div className="relative">
+            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">
+              JG
+            </div>
+            <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />
+          </div>
+        </div>
       </div>
     </header>
   );

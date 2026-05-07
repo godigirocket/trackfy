@@ -6,204 +6,252 @@ import {
 } from "@/components/ui/table";
 import { 
   ChevronDown, ChevronRight, Play, Pause, MoreHorizontal, 
-  Copy, Edit2, ExternalLink, Search, Filter, Download, Plus
+  Copy, Edit2, Search, Filter, Download, Plus, Settings, RefreshCw
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 
 interface Campaign {
   id: string;
   name: string;
-  status: "ACTIVE" | "PAUSED" | "ARCHIVED";
-  results: string;
-  cpl: string;
+  status: boolean;
   budget: string;
-  spend: string;
-  impressions: string;
-  roi: string;
-  type: "campaign" | "adset" | "ad";
-  children?: any[];
+  vendas: number;
+  cpa: string;
+  gastos: string;
+  ic: number;
+  lucro: string;
+  cpi: string;
+  color?: string;
 }
 
 const MOCK_DATA: Campaign[] = [
   {
     id: "c1",
-    name: "Black Friday 2024 — FASE 1",
-    status: "ACTIVE",
-    results: "1.240 Leads",
-    cpl: "R$ 12,40",
-    budget: "R$ 500,00",
-    spend: "R$ 15.376,00",
-    impressions: "450.000",
-    roi: "4.2x",
-    type: "campaign",
-    children: [
-      {
-        id: "as1",
-        name: "Lookalike 1% — Compradores",
-        status: "ACTIVE",
-        results: "840 Leads",
-        cpl: "R$ 10,20",
-        budget: "R$ 200,00",
-        spend: "R$ 8.568,00",
-        impressions: "200.000",
-        roi: "5.1x",
-        type: "adset"
-      }
-    ]
+    name: "CP14 - CBO - 1-5-1 - AD6 #14",
+    status: true,
+    budget: "R$ 800,00",
+    vendas: 7,
+    cpa: "R$ 49,82",
+    gastos: "R$ 348,74",
+    ic: 22,
+    lucro: "R$ 602,28",
+    cpi: "R$ 15,85",
+    color: "bg-purple-500"
   },
   {
     id: "c2",
-    name: "Retargeting — Carrinho Abandonado",
-    status: "PAUSED",
-    results: "120 Vendas",
-    cpl: "R$ 45,00",
-    budget: "R$ 150,00",
-    spend: "R$ 5.400,00",
-    impressions: "80.000",
-    roi: "2.8x",
-    type: "campaign"
+    name: "CP24 - CBO - 1-1-4 - VSL2",
+    status: true,
+    budget: "R$ 300,00",
+    vendas: 2,
+    cpa: "R$ 52,06",
+    gastos: "R$ 104,11",
+    ic: 12,
+    lucro: "R$ 167,61",
+    cpi: "R$ 8,67",
+  },
+  {
+    id: "c3",
+    name: "CP60 - CBO - 1-5-1 - AD6 #49 - Cópia",
+    status: false,
+    budget: "R$ 300,00",
+    vendas: 2,
+    cpa: "R$ 53,57",
+    gastos: "R$ 107,14",
+    ic: 10,
+    lucro: "R$ 118,03",
+    cpi: "R$ 10,71",
+    color: "bg-green-500"
+  },
+  {
+    id: "c4",
+    name: "CP58 - CBO - 1-5-1 - AD6 #46",
+    status: false,
+    budget: "R$ 300,00",
+    vendas: 1,
+    cpa: "R$ 79,32",
+    gastos: "R$ 79,32",
+    ic: 4,
+    lucro: "R$ 56,54",
+    cpi: "R$ 19,83",
+    color: "bg-blue-500"
   }
 ];
 
 export function CampaignsTable() {
-  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
-  const [search, setSearch] = useState("");
-
-  const toggleExpand = (id: string) => {
-    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
-  };
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-2 flex-1">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar por nome ou ID..." 
-              value={search}
-              onChange={(e: any) => setSearch(e.target.value)}
-              className="pl-10 h-10 bg-card border-border text-xs font-bold uppercase tracking-widest"
-            />
-          </div>
-          <Button variant="outline" className="h-10 gap-2 text-xs font-bold uppercase tracking-widest">
-            <Filter className="w-4 h-4" /> Filtros
-          </Button>
-        </div>
+    <div className="space-y-0 border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden">
+      {/* Upper Toolbar (White) */}
+      <div className="flex items-center justify-between p-4 bg-white">
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="h-10 gap-2 text-xs font-bold uppercase tracking-widest">
-            <Download className="w-4 h-4" /> Exportar
+          <Button variant="ghost" className="h-10 w-10 p-0 rounded-lg border border-gray-100">
+             <Settings className="w-5 h-5 text-gray-400" />
           </Button>
-          <Button className="h-10 gap-2 text-xs font-bold uppercase tracking-widest bg-primary text-primary-foreground">
-            <Plus className="w-4 h-4" /> Criar Campanha
+          <Button variant="ghost" className="h-10 gap-2 border border-gray-100 text-xs font-bold text-gray-600 px-4">
+             <Edit2 className="w-4 h-4" /> Abrir no gerenciador
           </Button>
+          <Button variant="ghost" className="h-10 gap-2 border border-gray-100 text-xs font-bold text-gray-600 px-4">
+             <Copy className="w-4 h-4" /> Duplicar campanhas
+          </Button>
+          <Select>
+            <SelectTrigger className="w-10 h-10 p-0 border border-gray-100 justify-center">
+               <ChevronDown className="w-4 h-4 text-gray-400" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Ações</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-4">
+           <span className="text-xs font-medium text-gray-400">Atualizado há 2 minutos</span>
+           <Button className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 h-10">
+              Atualizar
+           </Button>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      {/* Tabs Toolbar (Light Gray) */}
+      <div className="flex items-center justify-between border-y border-gray-100 px-2 py-0">
+        <div className="flex items-center">
+          <button className="flex items-center gap-2 px-6 py-4 border-b-2 border-blue-600 text-blue-600 font-bold text-sm">
+             <Plus className="w-4 h-4" /> Campanhas
+             <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full ml-1">2 selecionados</span>
+          </button>
+          <button className="flex items-center gap-2 px-6 py-4 text-gray-400 font-bold text-sm hover:text-gray-600">
+             <MoreHorizontal className="w-4 h-4" /> Conjuntos para 2 campanhas
+          </button>
+          <button className="flex items-center gap-2 px-6 py-4 text-gray-400 font-bold text-sm hover:text-gray-600">
+             <MoreHorizontal className="w-4 h-4" /> Anúncios para 2 campanhas
+          </button>
+        </div>
+      </div>
+
+      {/* Filters Area (Gray) */}
+      <div className="p-4 bg-gray-50/50 grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Nome da Campanha</label>
+            <Input placeholder="Filtrar por nome" className="h-10 bg-white border-gray-200 text-xs" />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Status da Campanha</label>
+            <Select defaultValue="any">
+              <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
+                <SelectValue placeholder="Qualquer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Qualquer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Data de cadastro</label>
+            <Select defaultValue="today">
+              <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
+                <SelectValue placeholder="Hoje" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Hoje</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Conta de Anúncio</label>
+            <Select defaultValue="c2">
+              <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
+                <SelectValue placeholder="CONTA 02" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="c2">CONTA 02</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-gray-400 uppercase">Produto</label>
+            <Select defaultValue="any">
+              <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
+                <SelectValue placeholder="Qualquer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Qualquer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+      </div>
+
+      {/* Table Area */}
+      <div className="overflow-x-auto">
         <Table>
-          <TableHeader className="bg-muted/50">
-            <TableRow className="border-border hover:bg-transparent">
-              <TableHead className="w-[40px]"></TableHead>
-              <TableHead className="w-[40px]">
-                <Checkbox />
-              </TableHead>
-              <TableHead className="text-[10px] font-black uppercase tracking-[0.2em] h-12">Nome da Campanha</TableHead>
-              <TableHead className="text-[10px] font-black uppercase tracking-[0.2em] h-12">Status</TableHead>
-              <TableHead className="text-[10px] font-black uppercase tracking-[0.2em] h-12">Resultados</TableHead>
-              <TableHead className="text-[10px] font-black uppercase tracking-[0.2em] h-12 text-right">Custo/Res.</TableHead>
-              <TableHead className="text-[10px] font-black uppercase tracking-[0.2em] h-12 text-right">Orçamento</TableHead>
-              <TableHead className="text-[10px] font-black uppercase tracking-[0.2em] h-12 text-right">Gasto Total</TableHead>
-              <TableHead className="text-[10px] font-black uppercase tracking-[0.2em] h-12 text-right">ROI</TableHead>
-              <TableHead className="text-[10px] font-black uppercase tracking-[0.2em] h-12 w-[80px]"></TableHead>
+          <TableHeader className="bg-gray-50/50">
+            <TableRow className="hover:bg-transparent border-gray-200">
+              <TableHead className="w-[50px] text-center"><Checkbox /></TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Status</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Campanha</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Orçamento</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-center">Vendas</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-right">CPA</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-right">Gastos</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-center">IC</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-right">Lucro</TableHead>
+              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-right">CPI</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {MOCK_DATA.map((campaign) => (
-              <>
-                <TableRow key={campaign.id} className="border-border group hover:bg-muted/30">
-                  <TableCell>
-                    {campaign.children && (
-                      <button onClick={() => toggleExpand(campaign.id)} className="p-1 hover:bg-muted rounded">
-                        {expandedRows[campaign.id] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                      </button>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Checkbox />
-                  </TableCell>
-                  <TableCell className="max-w-[300px]">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-black tracking-tight truncate">{campaign.name}</span>
-                        <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1">
-                          <Edit2 className="w-3 h-3 text-muted-foreground" />
-                        </button>
-                      </div>
-                      <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">{campaign.id}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div className={cn(
-                        "w-2 h-2 rounded-full",
-                        campaign.status === "ACTIVE" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-muted-foreground"
-                      )} />
-                      <Badge variant="outline" className={cn(
-                        "text-[9px] font-black uppercase tracking-widest px-2 py-0",
-                        campaign.status === "ACTIVE" ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/5" : "text-muted-foreground"
-                      )}>
-                        {campaign.status}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs font-bold">{campaign.results}</TableCell>
-                  <TableCell className="text-xs font-bold text-right">{campaign.cpl}</TableCell>
-                  <TableCell className="text-xs font-bold text-right">{campaign.budget}</TableCell>
-                  <TableCell className="text-xs font-bold text-right">{campaign.spend}</TableCell>
-                  <TableCell className="text-xs font-bold text-right text-emerald-500">{campaign.roi}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        {campaign.status === "ACTIVE" ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-                
-                {expandedRows[campaign.id] && campaign.children?.map(adset => (
-                  <TableRow key={adset.id} className="border-border bg-muted/20 hover:bg-muted/40">
-                    <TableCell></TableCell>
-                    <TableCell></TableCell>
-                    <TableCell className="pl-8">
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 border-l border-b border-muted-foreground/30 -mt-1 ml-[-12px]" />
-                        <span className="text-[11px] font-bold text-muted-foreground italic truncate">{adset.name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-[8px] font-bold uppercase tracking-widest scale-90 origin-left">
-                        {adset.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-[11px] font-medium opacity-60">{adset.results}</TableCell>
-                    <TableCell className="text-[11px] font-medium text-right opacity-60">{adset.cpl}</TableCell>
-                    <TableCell className="text-[11px] font-medium text-right opacity-60">{adset.budget}</TableCell>
-                    <TableCell className="text-[11px] font-medium text-right opacity-60">{adset.spend}</TableCell>
-                    <TableCell className="text-[11px] font-bold text-right text-emerald-500/60">{adset.roi}</TableCell>
-                    <TableCell></TableCell>
-                  </TableRow>
-                ))}
-              </>
+              <TableRow key={campaign.id} className="border-gray-100 hover:bg-gray-50 transition-colors">
+                <TableCell className="text-center"><Checkbox checked={campaign.id === 'c1' || campaign.id === 'c3'} /></TableCell>
+                <TableCell>
+                  <Switch checked={campaign.status} />
+                </TableCell>
+                <TableCell>
+                   <div className="flex items-center gap-3">
+                      {campaign.color && <div className={`w-3 h-3 rounded-full ${campaign.color}`} />}
+                      <span className="text-sm font-bold text-gray-600">{campaign.name}</span>
+                   </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500">
+                     <Edit2 className="w-3 h-3 text-gray-300" />
+                     <div className="flex flex-col leading-tight">
+                        <span>{campaign.budget}</span>
+                        <span className="text-[9px] text-gray-300 font-medium">Diário</span>
+                     </div>
+                  </div>
+                </TableCell>
+                <TableCell className="text-center font-bold text-gray-600">{campaign.vendas}</TableCell>
+                <TableCell className="text-right font-bold text-gray-600">{campaign.cpa}</TableCell>
+                <TableCell className="text-right font-bold text-gray-600">{campaign.gastos}</TableCell>
+                <TableCell className="text-center font-bold text-gray-600">{campaign.ic}</TableCell>
+                <TableCell className="text-right font-bold text-green-600">{campaign.lucro}</TableCell>
+                <TableCell className="text-right font-bold text-gray-400">{campaign.cpi}</TableCell>
+              </TableRow>
             ))}
           </TableBody>
+          <tfoot className="bg-gray-50/50">
+             <TableRow className="border-none font-black text-gray-700">
+                <TableCell className="text-[10px] font-black uppercase text-gray-400">N/A</TableCell>
+                <TableCell className="text-[10px] font-black uppercase text-gray-400">N/A</TableCell>
+                <TableCell className="text-xs font-black uppercase">17 Campanhas</TableCell>
+                <TableCell className="text-xs font-black uppercase">N/A</TableCell>
+                <TableCell className="text-center text-xs font-black">15</TableCell>
+                <TableCell className="text-right text-xs font-black">R$ 110,94</TableCell>
+                <TableCell className="text-right text-xs font-black">R$ 1.664,14</TableCell>
+                <TableCell className="text-center text-xs font-black">139</TableCell>
+                <TableCell className="text-right text-xs font-black text-green-600">R$ 327,21</TableCell>
+                <TableCell className="text-right text-xs font-black">R$ 11,50</TableCell>
+             </TableRow>
+          </tfoot>
         </Table>
       </div>
     </div>

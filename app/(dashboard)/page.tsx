@@ -1,111 +1,183 @@
-import { MetricCard } from "@/components/dashboard/MetricCard";
-import { ExecutiveSummary } from "@/components/dashboard/ExecutiveSummary";
+"use client";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, TrendingUp, Users, DollarSign, Wallet } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { PDFExportButton } from "@/components/reports/PDFExportButton";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Info, RefreshCw } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 
-export default function DashboardPage() {
+const stats = [
+  { label: "Faturamento Líquido", value: "R$ 635.789,23", info: true },
+  { label: "Gastos com anúncios", value: "R$ 456.827,90", info: true },
+  { label: "ROAS", value: "1.39", color: "text-green-600", info: true },
+  { label: "Lucro", value: "R$ 159.887,65", color: "text-green-600", info: true },
+];
+
+const subStats = [
+  { label: "Vendas Pendentes", value: "R$ 89.289,38" },
+  { label: "ROI", value: "35.0%", color: "text-green-600", info: true },
+  { label: "Margem de Lucro", value: "25.1%", color: "text-green-600" },
+  { label: "Vendas Reembolsadas", value: "R$ 18.459,20" },
+  { label: "Reembolso", value: "2.4%", info: true },
+  { label: "ARPU", value: "R$ 238,79", info: true },
+  { label: "Imposto", value: "R$ 19.073,68", info: true },
+  { label: "Chargeback", value: "0.7%" },
+];
+
+const paymentData = [
+  { name: 'Pix', value: 48, color: '#3B82F6' },
+  { name: 'Cartão', value: 27, color: '#60A5FA' },
+  { name: 'Boleto', value: 15, color: '#FBBF24' },
+  { name: 'Outros', value: 8, color: '#EF4444' },
+];
+
+export default function DashboardUtmifyPage() {
   return (
-    <div id="dashboard-content" className="space-y-10 pb-20 p-4 -m-4">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-4xl font-black text-foreground tracking-tighter uppercase">Marketing Command Center 🕹️</h1>
-          <p className="text-[14px] font-bold text-muted-foreground uppercase tracking-widest">
-            Visão geral da sua operação de vendas e anúncios em tempo real.
-          </p>
-        </div>
-        <PDFExportButton />
-      </div>
+    <div className="space-y-6 max-w-[1600px] mx-auto">
+      {/* Resumo Bar */}
+      <Card className="border-none shadow-sm bg-white">
+        <CardHeader className="flex flex-row items-center justify-between py-3 px-6 border-b border-gray-100">
+          <CardTitle className="text-sm font-bold text-gray-700 uppercase tracking-tight">Resumo</CardTitle>
+          <div className="flex items-center gap-4 text-xs text-gray-400 font-medium">
+            <span>Atualizado há 1 minuto</span>
+            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6">
+              Atualizar
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6 bg-gray-50/50">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-gray-500 uppercase">Data de cadastro</label>
+              <Select defaultValue="7d">
+                <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7d">Últimos 7 dias</SelectItem>
+                  <SelectItem value="30d">Últimos 30 dias</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-gray-500 uppercase">Conta de Anúncio</label>
+              <Select defaultValue="all">
+                <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-gray-500 uppercase">Plataforma</label>
+              <Select defaultValue="any">
+                <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Qualquer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-gray-500 uppercase">Produto</label>
+              <Select defaultValue="any">
+                <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Qualquer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-        <div className="xl:col-span-12">
-          <ExecutiveSummary />
+      {/* Main Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+        {/* Top 4 Cards */}
+        <div className="md:col-span-12 grid grid-cols-1 md:grid-cols-4 gap-6">
+          {stats.map((stat) => (
+            <Card key={stat.label} className="border-none shadow-sm bg-white">
+              <CardContent className="p-6 flex flex-col gap-2 relative">
+                <div className="flex justify-between items-start">
+                  <span className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">{stat.label}</span>
+                  {stat.info && <Info size={14} className="text-gray-300" />}
+                </div>
+                <span className={`text-2xl font-black ${stat.color || 'text-gray-900'}`}>{stat.value}</span>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
-        <div className="xl:col-span-3 lg:col-span-6">
-          <MetricCard 
-            title="Investimento Total" 
-            value="12.450,80" 
-            prefix="R$"
-            variation="15%" 
-            isPositive={false} 
-          />
-        </div>
-        <div className="xl:col-span-3 lg:col-span-6">
-          <MetricCard 
-            title="Vendas Realizadas" 
-            value="45.120,00" 
-            prefix="R$"
-            variation="24%" 
-            isPositive={true} 
-          />
-        </div>
-        <div className="xl:col-span-3 lg:col-span-6">
-          <MetricCard 
-            title="ROAS Consolidado" 
-            value="3.62" 
-            variation="8%" 
-            isPositive={true} 
-          />
-        </div>
-        <div className="xl:col-span-3 lg:col-span-6">
-          <MetricCard 
-            title="Custo por Lead" 
-            value="14.20" 
-            prefix="R$"
-            variation="12%" 
-            isPositive={true} 
-          />
-        </div>
-
-        <div className="xl:col-span-8 lg:col-span-12">
-          <Card className="border-border bg-card enterprise-shadow h-[400px] flex flex-col">
+        {/* Left Side: Payment Chart */}
+        <div className="md:col-span-4 h-full">
+          <Card className="border-none shadow-sm bg-white h-full">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Performance Semanal</CardTitle>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-primary/10 rounded-lg">
-                  <div className="w-2 h-2 rounded-full bg-primary" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-primary">Vendas</span>
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-muted rounded-lg">
-                  <div className="w-2 h-2 rounded-full bg-muted-foreground" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Gasto</span>
+              <CardTitle className="text-xs font-bold text-gray-700 uppercase tracking-tight">Vendas por Pagamento</CardTitle>
+              <Info size={14} className="text-gray-300" />
+            </CardHeader>
+            <CardContent className="h-[300px] flex flex-col items-center justify-center pt-0">
+              <div className="relative w-full h-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={paymentData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {paymentData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase">Total</p>
+                  <p className="text-xl font-black text-gray-800">2867</p>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent className="flex-1 flex items-center justify-center border-t border-border/50">
-              <div className="flex flex-col items-center gap-4 opacity-20">
-                <BarChart3 size={64} className="text-muted-foreground" />
-                <p className="text-xs font-black uppercase tracking-widest">Gráfico de Performance em Desenvolvimento</p>
+              <div className="grid grid-cols-4 gap-2 w-full mt-2">
+                 {paymentData.map((item) => (
+                   <div key={item.name} className="flex flex-col items-center gap-1">
+                     <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+                        <span className="text-[10px] font-bold text-gray-500">{item.name}</span>
+                     </div>
+                   </div>
+                 ))}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="xl:col-span-4 lg:col-span-12">
-          <Card className="border-border bg-card enterprise-shadow h-[400px]">
-            <CardHeader>
-              <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Top Canais</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {[
-                { name: "Facebook Ads", value: "R$ 8.450", color: "bg-[#1877F2]", percent: 65 },
-                { name: "Google Ads", value: "R$ 3.120", color: "bg-[#4285F4]", percent: 25 },
-                { name: "TikTok Ads", value: "R$ 880", color: "bg-[#000000]", percent: 10 }
-              ].map((item) => (
-                <div key={item.name} className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-black uppercase tracking-tight">{item.name}</span>
-                    <span className="text-xs font-black">{item.value}</span>
-                  </div>
-                  <div className="h-2 w-full bg-muted/50 rounded-full overflow-hidden">
-                    <div className={cn("h-full rounded-full", item.color)} style={{ width: `${item.percent}%` }} />
-                  </div>
+        {/* Right Side: Sub Stats Grid */}
+        <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+          {subStats.map((stat) => (
+            <Card key={stat.label} className="border-none shadow-sm bg-white">
+              <CardContent className="p-6 flex flex-col gap-1 relative">
+                <div className="flex justify-between items-start">
+                  <span className="text-[11px] font-bold text-gray-500 uppercase tracking-tight">{stat.label}</span>
+                  {stat.info && <Info size={14} className="text-gray-300" />}
                 </div>
-              ))}
-            </CardContent>
-          </Card>
+                <span className={`text-lg font-black ${stat.color || 'text-gray-900'}`}>{stat.value}</span>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     </div>
