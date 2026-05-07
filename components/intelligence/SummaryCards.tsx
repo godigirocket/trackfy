@@ -19,7 +19,16 @@ interface SummaryProps {
   }
 }
 
-export function SummaryCards({ summary }: SummaryProps) {
+const DEFAULT_SUMMARY = {
+  totalSpend: 0,
+  totalLeads: 0,
+  avgCpl: 0,
+  totalConversations: 0,
+  scalable: 0,
+  needsAttention: 0,
+};
+
+export function SummaryCards({ summary = DEFAULT_SUMMARY }: SummaryProps) {
   const cards = [
     { label: "INVESTIMENTO TOTAL", value: formatCurrency(summary.totalSpend), icon: DollarSign },
     { label: "CPL MÉDIO GERAL", value: formatCurrency(summary.avgCpl), icon: Target },

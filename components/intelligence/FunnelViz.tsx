@@ -5,7 +5,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { Layers, Activity, ChevronRight, MousePointer2, UserCheck, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function FunnelViz({ intel }: { intel: any[] }) {
+export function FunnelViz({ intel = [] }: { intel: any[] }) {
   const topCampaigns = intel.slice(0, 5);
   const maxImp = Math.max(...topCampaigns.map(c => c.impressions), 1);
 
