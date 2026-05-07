@@ -128,7 +128,7 @@ export function AudienceBreakdown() {
                       dataKey="value"
                     >
                       {genderData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.name === 'Masculino' ? GENDER_COLORS.male : entry.name === 'Feminino' ? GENDER_COLORS.female : GENDER_COLORS.unknown} />
+                        <Cell key={`cell-${index}`} fill={entry?.name === 'Masculino' ? GENDER_COLORS.male : entry?.name === 'Feminino' ? GENDER_COLORS.female : GENDER_COLORS.unknown} />
                       ))}
                     </Pie>
                     <Tooltip 

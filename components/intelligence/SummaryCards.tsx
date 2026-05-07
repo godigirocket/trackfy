@@ -30,12 +30,12 @@ const DEFAULT_SUMMARY = {
 
 export function SummaryCards({ summary = DEFAULT_SUMMARY }: SummaryProps) {
   const cards = [
-    { label: "INVESTIMENTO TOTAL", value: formatCurrency(summary.totalSpend), icon: DollarSign },
-    { label: "CPL MÉDIO GERAL", value: formatCurrency(summary.avgCpl), icon: Target },
-    { label: "CONVERSAS/LEADS", value: (summary.totalLeads > 0 ? summary.totalLeads : summary.totalConversations).toLocaleString("pt-BR"), icon: Users },
-    { label: "CONVERSAS INICIADAS", value: summary.totalConversations.toLocaleString("pt-BR"), icon: MessageCircle },
-    { label: "CAMPANHAS ESCALAR 🟢", value: summary.scalable.toString(), icon: TrendingUp },
-    { label: "ATENÇÃO / CORTE 🔴", value: summary.needsAttention.toString(), icon: AlertCircle },
+    { label: "INVESTIMENTO TOTAL", value: formatCurrency(summary?.totalSpend || 0), icon: DollarSign },
+    { label: "CPL MÉDIO GERAL", value: formatCurrency(summary?.avgCpl || 0), icon: Target },
+    { label: "CONVERSAS/LEADS", value: ((summary?.totalLeads || 0) > 0 ? (summary?.totalLeads || 0) : (summary?.totalConversations || 0)).toLocaleString("pt-BR"), icon: Users },
+    { label: "CONVERSAS INICIADAS", value: (summary?.totalConversations || 0).toLocaleString("pt-BR"), icon: MessageCircle },
+    { label: "CAMPANHAS ESCALAR 🟢", value: (summary?.scalable || 0).toString(), icon: TrendingUp },
+    { label: "ATENÇÃO / CORTE 🔴", value: (summary?.needsAttention || 0).toString(), icon: AlertCircle },
   ];
 
   return (

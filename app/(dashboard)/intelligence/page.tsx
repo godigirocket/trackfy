@@ -1,5 +1,8 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
+
 import { FunnelViz } from "@/components/intelligence/FunnelViz";
 import { DeliveryHealth } from "@/components/intelligence/DeliveryHealth";
 import { HourlyHeatmap } from "@/components/intelligence/HourlyHeatmap";
