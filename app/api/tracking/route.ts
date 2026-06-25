@@ -36,6 +36,11 @@ type TrackingPayload = {
   eventId?: string;
   value?: number;
   currency?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  externalId?: string;
+  consent?: boolean;
 };
 
 function trackingClient() {
@@ -147,6 +152,78 @@ function moneyValue(value: unknown) {
   return Number.isFinite(number) && number >= 0 ? number : 0;
 }
 
+function cleanEmail(value: unknown) {
+  if (typeof value !== "string") return null;
+  const email = value.trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 180 ? email : null;
+}
+
+function cleanPhone(value: unknown) {
+  if (typeof value !== "string") return null;
+  const phone = value.replace(/\D/g, "");
+  return phone.length >= 10 && phone.length <= 15 ? phone : null;
+}
+
+function cleanContactText(value: unknown, max = 180) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim().slice(0, max) : null;
+}
+
+async function upsertContact(input: {
+  supabase: ReturnType<typeof trackingClient>;
+  siteId: string;
+  event: string;
+  source: string;
+  medium: string;
+  campaign: string;
+  channel: string;
+  page: string;
+  body: TrackingPayload;
+}) {
+  if (!input.supabase || input.body.consent === false) return;
+  const email = cleanEmail(input.body.email);
+  const phone = cleanPhone(input.body.phone);
+  const externalId = cleanContactText(input.body.externalId, 120);
+  const name = cleanContactText(input.body.name, 160);
+  if (!email && !phone && !externalId) return;
+
+  const contactKey = email ? `email:${email}` : phone ? `phone:${phone}` : `external:${externalId}`;
+  const isLead = input.event === "generate_lead";
+  const isPurchase = input.event === "purchase";
+  const value = isPurchase ? moneyValue(input.body.value) : 0;
+  const now = new Date().toISOString();
+
+  const { data: existing } = await input.supabase
+    .from("trackfy_contacts")
+    .select("orders_count,total_value,first_seen_at")
+    .eq("site_id", input.siteId)
+    .eq("contact_key", contactKey)
+    .maybeSingle();
+
+  await input.supabase.from("trackfy_contacts").upsert({
+    site_id: input.siteId,
+    contact_key: contactKey,
+    email,
+    phone,
+    name,
+    external_id: externalId,
+    source: input.source,
+    medium: input.medium,
+    campaign: input.campaign,
+    channel: input.channel,
+    first_page: existing?.first_seen_at ? undefined : input.page,
+    last_page: input.page,
+    first_seen_at: existing?.first_seen_at ?? now,
+    last_seen_at: now,
+    lead_at: isLead ? now : undefined,
+    purchase_at: isPurchase ? now : undefined,
+    orders_count: Number(existing?.orders_count ?? 0) + (isPurchase ? 1 : 0),
+    total_value: Number(existing?.total_value ?? 0) + value,
+    currency: validText(input.body.currency, 8) ? input.body.currency!.trim().toUpperCase() : "BRL",
+    consent: true,
+    metadata: {},
+  }, { onConflict: "site_id,contact_key" });
+}
+
 export async function POST(request: NextRequest) {
   const supabase = trackingClient();
   if (!supabase) {
@@ -162,7 +239,9 @@ export async function POST(request: NextRequest) {
   const event = body.event!.replace(/[^a-z0-9_]/gi, "_").toLowerCase();
   const source = validText(body.source) ? body.source!.trim().toLowerCase() : "direct";
   const medium = validText(body.medium) ? body.medium!.trim().toLowerCase() : "direct";
+  const campaign = validText(body.campaign) ? body.campaign!.trim() : "(not set)";
   const referrer = validText(body.referrer, 1000) ? body.referrer!.trim() : null;
+  const channel = classifyTraffic({ source, medium, referrer });
   const { error } = await supabase.from("trackfy_events").insert({
     site_id: body.siteId!.trim(),
     event_name: event,
@@ -172,10 +251,10 @@ export async function POST(request: NextRequest) {
     referrer,
     source,
     medium,
-    campaign: validText(body.campaign) ? body.campaign!.trim() : "(not set)",
+    campaign,
     term: validText(body.term) ? body.term!.trim() : null,
     content: validText(body.content) ? body.content!.trim() : null,
-    channel: classifyTraffic({ source, medium, referrer }),
+    channel,
     value: Number.isFinite(Number(body.value)) ? Number(body.value) : null,
     currency: validText(body.currency, 8) ? body.currency!.trim().toUpperCase() : "BRL",
   });
@@ -194,10 +273,13 @@ export async function POST(request: NextRequest) {
       product: null,
       source,
       medium,
-      campaign: validText(body.campaign) ? body.campaign!.trim() : "(not set)",
-      channel: classifyTraffic({ source, medium, referrer }),
+      campaign,
+      channel,
       updated_at: new Date().toISOString(),
     }, { onConflict: "site_id,transaction_id" });
+  }
+  if (["identify", "generate_lead", "purchase"].includes(event)) {
+    await upsertContact({ supabase, siteId: body.siteId!.trim(), event, source, medium, campaign, channel, page: body.path!.trim(), body });
   }
   return json({ ok: true }, { status: 201 });
 }
@@ -215,6 +297,7 @@ export async function DELETE(request: NextRequest) {
 
   const orderResult = await supabase.from("trackfy_orders").delete().eq("site_id", siteId);
   const eventResult = await supabase.from("trackfy_events").delete().eq("site_id", siteId);
+  await supabase.from("trackfy_contacts").delete().eq("site_id", siteId);
   if (orderResult.error || eventResult.error) return json({ error: "Não foi possível resetar as métricas." }, { status: 500 });
 
   return json({ ok: true, siteId });
@@ -247,6 +330,14 @@ export async function GET(request: NextRequest) {
     .limit(5000);
   // Permite publicar o painel antes de a migração de pedidos ser executada.
   const orders = orderError ? [] : orderData ?? [];
+
+  const { data: contactData } = await supabase
+    .from("trackfy_contacts")
+    .select("email,phone,name,source,medium,campaign,channel,first_page,last_page,first_seen_at,last_seen_at,lead_at,purchase_at,orders_count,total_value,currency")
+    .eq("site_id", siteId)
+    .order("last_seen_at", { ascending: false })
+    .limit(200);
+  const contacts = contactData ?? [];
 
   const rows = uniqueRows(((data ?? []) as TrackingRow[]).filter((row) => !isInternalTest(row)));
   const pageViews = rows.filter((row) => row.event_name === "page_view").length;
@@ -323,12 +414,32 @@ export async function GET(request: NextRequest) {
       refundedOrders: orders.filter((order) => order.status === "refunded").length,
       revenue: orders.filter((order) => order.status === "paid").reduce((sum, order) => sum + Number(order.value), 0),
       refunds: orders.filter((order) => order.status === "refunded").reduce((sum, order) => sum + Number(order.value), 0),
+      savedLeads: contacts.filter((contact) => contact.lead_at).length,
+      savedBuyers: contacts.filter((contact) => contact.purchase_at || Number(contact.orders_count) > 0).length,
     },
     eventCounts,
     channels,
     pages,
     campaigns,
     orders: orders.slice(0, 100).map((order) => ({ transactionId: order.transaction_id, status: order.status, value: Number(order.value), currency: order.currency, product: order.product, source: order.source, medium: order.medium, campaign: order.campaign, createdAt: order.created_at, updatedAt: order.updated_at })),
+    contacts: contacts.slice(0, 100).map((contact) => ({
+      name: contact.name,
+      email: contact.email,
+      phone: contact.phone,
+      source: contact.source,
+      medium: contact.medium,
+      campaign: contact.campaign,
+      channel: contact.channel,
+      firstPage: contact.first_page,
+      lastPage: contact.last_page,
+      firstSeenAt: contact.first_seen_at,
+      lastSeenAt: contact.last_seen_at,
+      leadAt: contact.lead_at,
+      purchaseAt: contact.purchase_at,
+      ordersCount: Number(contact.orders_count ?? 0),
+      totalValue: Number(contact.total_value ?? 0),
+      currency: contact.currency,
+    })),
     recentEvents: rows.slice(0, 20).map((row) => ({ event: row.event_name, page: row.page_path, source: row.source, campaign: row.campaign, createdAt: row.created_at })),
   });
 }

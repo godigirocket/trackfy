@@ -50,6 +50,35 @@ create table if not exists public.trackfy_orders (
 create index if not exists trackfy_orders_site_updated_idx on public.trackfy_orders (site_id, updated_at desc);
 alter table public.trackfy_orders enable row level security;
 
+create table if not exists public.trackfy_contacts (
+  id uuid primary key default gen_random_uuid(),
+  site_id text not null,
+  contact_key text not null,
+  email text,
+  phone text,
+  name text,
+  external_id text,
+  source text not null default 'direct',
+  medium text not null default 'direct',
+  campaign text not null default '(not set)',
+  channel text not null default 'unknown',
+  first_page text,
+  last_page text,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  lead_at timestamptz,
+  purchase_at timestamptz,
+  orders_count integer not null default 0,
+  total_value numeric not null default 0,
+  currency text not null default 'BRL',
+  consent boolean not null default true,
+  metadata jsonb not null default '{}'::jsonb,
+  unique (site_id, contact_key)
+);
+create index if not exists trackfy_contacts_site_seen_idx on public.trackfy_contacts (site_id, last_seen_at desc);
+create index if not exists trackfy_contacts_site_purchase_idx on public.trackfy_contacts (site_id, purchase_at desc);
+alter table public.trackfy_contacts enable row level security;
+
 create table if not exists public.trackfy_utms (
   id uuid primary key,
   site_id text not null,

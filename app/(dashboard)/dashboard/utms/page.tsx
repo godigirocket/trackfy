@@ -134,11 +134,12 @@ function buildNativeTrackingSnippet(endpoint: string, siteId: string, measuremen
 type TrackingSummary = {
   updatedAt: string;
   range?: { days: number; since: string };
-  totals: { visits: number; visitors?: number; pageViews?: number; leads: number; checkouts: number; payments?: number; purchases: number; paidOrders?: number; refundedOrders?: number; revenue?: number; refunds?: number; events?: number; attributedSessions?: number; attributedVisitors?: number };
+  totals: { visits: number; visitors?: number; pageViews?: number; leads: number; checkouts: number; payments?: number; purchases: number; paidOrders?: number; refundedOrders?: number; revenue?: number; refunds?: number; events?: number; attributedSessions?: number; attributedVisitors?: number; savedLeads?: number; savedBuyers?: number };
   channels: Array<{ channel: TrafficChannel; visits: number; leads: number; checkouts: number; purchases: number; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
   pages: Array<{ path: string; url: string | null; visits: number; leads: number; checkouts: number; purchases: number; lastSeen: string }>;
   campaigns: Array<{ source: string; medium: string; campaign: string; visits: number; leads?: number; checkouts?: number; purchases?: number; lastSeen: string; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
   recentEvents: Array<{ event: string; page: string; source: string; campaign: string; createdAt: string }>;
+  contacts?: Array<{ name: string | null; email: string | null; phone: string | null; source: string; medium: string; campaign: string; firstPage: string | null; lastPage: string | null; firstSeenAt: string; lastSeenAt: string; leadAt: string | null; purchaseAt: string | null; ordersCount: number; totalValue: number; currency: string }>;
   eventCounts: Record<string, number>;
 };
 
@@ -320,6 +321,9 @@ export default function UTMsPage() {
   const refunds = summary?.totals.refunds ?? 0;
   const netRevenue = Math.max(0, revenue - refunds);
   const paidOrders = summary?.totals.paidOrders ?? 0;
+  const savedLeads = summary?.totals.savedLeads ?? 0;
+  const savedBuyers = summary?.totals.savedBuyers ?? 0;
+  const savedContacts = summary?.contacts ?? [];
   const averageOrder = paidOrders > 0 ? revenue / paidOrders : 0;
   const revenuePerSession = summary && summary.totals.visits > 0 ? revenue / summary.totals.visits : 0;
   const paymentCount = summary?.totals.payments ?? summary?.eventCounts?.add_payment_info ?? 0;
@@ -889,6 +893,54 @@ export default function UTMsPage() {
                             <td className="px-5 py-3 text-[13px] tabular-nums font-bold" style={{ color: campaignRevenue > 0 ? "var(--green)" : "var(--text-2)" }}>{campaignRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
                             <td className="px-5 py-3 text-[13px] tabular-nums" style={{ color: cvr > 0 ? "var(--green)" : "var(--text-3)" }}>{cvr.toFixed(1)}%</td>
                             <td className="px-5 py-3 text-[12px] whitespace-nowrap" style={{ color: "var(--text-4)" }}>{new Date(campaign.lastSeen).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 border-b" style={{ borderColor: "var(--border)" }}>
+                  <div>
+                    <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Leads e compradores salvos</h2>
+                    <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Guarda nome, e-mail e telefone quando seu formulário/checkout envia esses dados ao Trackfy.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="badge badge-blue">{savedLeads} leads</span>
+                    <span className="badge badge-green">{savedBuyers} compradores</span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead style={{ background: "var(--bg-subtle)" }}>
+                      <tr>
+                        {["Contato", "Tipo", "Origem", "Valor", "Último sinal"].map((column) => (
+                          <th key={column} className="px-5 py-3 text-[11px] font-bold uppercase whitespace-nowrap" style={{ color: "var(--text-4)" }}>{column}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savedContacts.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-5 py-8">
+                            <p className="text-[13px] font-semibold" style={{ color: "var(--text-2)" }}>Nenhum contato salvo ainda.</p>
+                            <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Para salvar dados, envie <code>trackfyIdentify(&#123;name,email,phone&#125;)</code>, use um formulário marcado como lead ou passe os dados dentro do <code>trackfyPurchase</code>.</p>
+                          </td>
+                        </tr>
+                      ) : savedContacts.map((contact) => {
+                        const isBuyer = contact.ordersCount > 0 || !!contact.purchaseAt;
+                        return (
+                          <tr key={`${contact.email || contact.phone || contact.firstSeenAt}-${contact.lastSeenAt}`} className="border-t" style={{ borderColor: "var(--border)" }}>
+                            <td className="px-5 py-3 min-w-[230px]">
+                              <p className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>{contact.name || contact.email || contact.phone || "Contato sem nome"}</p>
+                              <p className="text-[11px] mt-0.5 font-mono" style={{ color: "var(--text-4)" }}>{contact.email || "sem e-mail"}{contact.phone ? ` · ${contact.phone}` : ""}</p>
+                            </td>
+                            <td className="px-5 py-3"><span className={isBuyer ? "badge badge-green" : "badge badge-blue"}>{isBuyer ? "Comprador" : "Lead"}</span></td>
+                            <td className="px-5 py-3 text-[12px]" style={{ color: "var(--text-3)" }}>{contact.source} / {contact.medium}<br /><span style={{ color: "var(--text-4)" }}>{contact.campaign}</span></td>
+                            <td className="px-5 py-3 text-[13px] font-bold tabular-nums" style={{ color: contact.totalValue > 0 ? "var(--green)" : "var(--text-2)" }}>{contact.totalValue.toLocaleString("pt-BR", { style: "currency", currency: contact.currency || "BRL" })}</td>
+                            <td className="px-5 py-3 text-[12px] whitespace-nowrap" style={{ color: "var(--text-4)" }}>{new Date(contact.lastSeenAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
                           </tr>
                         );
                       })}
