@@ -85,6 +85,15 @@ function uniqueRows(rows: TrackingRow[]) {
   });
 }
 
+function sessionKey(row: TrackingRow) {
+  if (row.event_id?.includes("|")) return row.event_id.split("|")[0];
+  return row.event_id || `${row.source}|${row.medium}|${row.campaign}|${row.created_at.slice(0, 16)}`;
+}
+
+function uniqueSessionCount(rows: TrackingRow[]) {
+  return new Set(rows.filter((row) => row.event_name === "page_view").map(sessionKey)).size;
+}
+
 export async function POST(request: NextRequest) {
   const supabase = trackingClient();
   if (!supabase) {
@@ -129,7 +138,9 @@ export async function GET(request: NextRequest) {
   if (!supabase) return json({ error: "Tracking backend ainda não configurado." }, { status: 503 });
   if (!siteId || siteId.length > 120) return json({ error: "siteId obrigatório." }, { status: 400 });
 
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const daysParam = Number(request.nextUrl.searchParams.get("days") ?? "30");
+  const days = [1, 3, 7, 14, 30, 90].includes(daysParam) ? daysParam : 30;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("trackfy_events")
     .select("event_name,event_id,page_path,page_url,source,medium,campaign,channel,created_at,value")
@@ -160,7 +171,7 @@ export async function GET(request: NextRequest) {
     const channelOrders = orders.filter((order) => order.channel === channel);
     const revenue = channelOrders.filter((order) => order.status === "paid").reduce((sum, order) => sum + Number(order.value), 0);
     const refunds = channelOrders.filter((order) => order.status === "refunded").reduce((sum, order) => sum + Number(order.value), 0);
-    const visits = rows.filter((row) => row.event_name === "page_view" && row.channel === channel).length;
+    const visits = uniqueSessionCount(rows.filter((row) => row.channel === channel));
     return {
       channel, visits,
       leads: rows.filter((row) => row.event_name === "generate_lead" && row.channel === channel).length,
@@ -182,22 +193,29 @@ export async function GET(request: NextRequest) {
     if (row.event_name === "purchase") page.purchases += 1;
     return all;
   }, {})).sort((a, b) => b.visits - a.visits || b.lastSeen.localeCompare(a.lastSeen)).slice(0, 50);
-  const campaigns = Object.values(rows.filter((row) => row.event_name === "page_view").reduce<Record<string, { source: string; medium: string; campaign: string; visits: number; lastSeen: string }>>((all, row) => {
+  const campaigns = Object.values(rows.reduce<Record<string, { source: string; medium: string; campaign: string; visits: number; leads: number; checkouts: number; purchases: number; lastSeen: string }>>((all, row) => {
     const key = `${row.source}|${row.medium}|${row.campaign}`;
-    if (!all[key]) all[key] = { source: row.source, medium: row.medium, campaign: row.campaign, visits: 0, lastSeen: row.created_at };
-    all[key].visits += 1;
+    if (!all[key]) all[key] = { source: row.source, medium: row.medium, campaign: row.campaign, visits: 0, leads: 0, checkouts: 0, purchases: 0, lastSeen: row.created_at, sessionKeys: new Set<string>() } as any;
+    if (row.event_name === "page_view") (all[key] as any).sessionKeys.add(sessionKey(row));
+    if (row.event_name === "generate_lead") all[key].leads += 1;
+    if (row.event_name === "begin_checkout") all[key].checkouts += 1;
+    if (row.event_name === "purchase") all[key].purchases += 1;
+    if (row.created_at > all[key].lastSeen) all[key].lastSeen = row.created_at;
     return all;
   }, {})).map((campaign) => {
     const campaignOrders = orders.filter((order) => order.source === campaign.source && order.medium === campaign.medium && order.campaign === campaign.campaign);
     const revenue = campaignOrders.filter((order) => order.status === "paid").reduce((sum, order) => sum + Number(order.value), 0);
     const refunds = campaignOrders.filter((order) => order.status === "refunded").reduce((sum, order) => sum + Number(order.value), 0);
     const paidOrders = campaignOrders.filter((order) => order.status === "paid").length;
-    return { ...campaign, paidOrders, refunds: campaignOrders.filter((order) => order.status === "refunded").length, revenue, netRevenue: revenue - refunds, conversionRate: campaign.visits > 0 ? (paidOrders / campaign.visits) * 100 : 0, averageOrder: paidOrders > 0 ? revenue / paidOrders : 0 };
+    const visits = (campaign as any).sessionKeys?.size ?? campaign.visits;
+    const { sessionKeys, ...cleanCampaign } = campaign as any;
+    return { ...cleanCampaign, visits, paidOrders, refunds: campaignOrders.filter((order) => order.status === "refunded").length, revenue, netRevenue: revenue - refunds, conversionRate: visits > 0 ? (paidOrders / visits) * 100 : 0, averageOrder: paidOrders > 0 ? revenue / paidOrders : 0 };
   }).sort((a, b) => b.netRevenue - a.netRevenue || b.visits - a.visits).slice(0, 50);
   return json({
     updatedAt: new Date().toISOString(),
+    range: { days, since },
     totals: {
-      visits: rows.filter((row) => row.event_name === "page_view").length,
+      visits: uniqueSessionCount(rows),
       leads: rows.filter((row) => row.event_name === "generate_lead").length,
       checkouts: rows.filter((row) => row.event_name === "begin_checkout").length,
       purchases: new Set(rows.filter((row) => row.event_name === "purchase").map((row) => row.event_id).filter(Boolean)).size,

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { Activity, BarChart3, Check, Code2, Copy, Database, ExternalLink, Link2, MousePointerClick, Plus, RefreshCw, Search, Tag, Trash2 } from "lucide-react";
+import { Activity, BarChart3, Check, Code2, Copy, Database, ExternalLink, Link2, MousePointerClick, Plus, RefreshCw, Search, Tag, Trash2, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sourceLabel, type TrafficChannel } from "@/lib/tracking";
 
@@ -133,10 +133,11 @@ function buildNativeTrackingSnippet(endpoint: string, siteId: string, measuremen
 
 type TrackingSummary = {
   updatedAt: string;
-  totals: { visits: number; leads: number; checkouts: number; purchases: number };
-  channels: Array<{ channel: TrafficChannel; visits: number; leads: number; checkouts: number; purchases: number }>;
+  range?: { days: number; since: string };
+  totals: { visits: number; leads: number; checkouts: number; purchases: number; paidOrders?: number; revenue?: number };
+  channels: Array<{ channel: TrafficChannel; visits: number; leads: number; checkouts: number; purchases: number; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
   pages: Array<{ path: string; url: string | null; visits: number; leads: number; checkouts: number; purchases: number; lastSeen: string }>;
-  campaigns: Array<{ source: string; medium: string; campaign: string; visits: number; lastSeen: string }>;
+  campaigns: Array<{ source: string; medium: string; campaign: string; visits: number; leads?: number; checkouts?: number; purchases?: number; lastSeen: string; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
   recentEvents: Array<{ event: string; page: string; source: string; campaign: string; createdAt: string }>;
   eventCounts: Record<string, number>;
 };
@@ -154,6 +155,7 @@ export default function UTMsPage() {
   const [summaryError, setSummaryError] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [utmsSyncing, setUtmsSyncing] = useState(false);
+  const [rangeDays, setRangeDays] = useState(7);
 
   useEffect(() => {
     setUTMs(loadUTMs());
@@ -221,7 +223,7 @@ export default function UTMsPage() {
     if (!tracker.siteId) return;
     setSummaryLoading(true); setSummaryError("");
     try {
-      const response = await fetch(`/api/tracking?siteId=${encodeURIComponent(tracker.siteId)}`, { cache: "no-store" });
+      const response = await fetch(`/api/tracking?siteId=${encodeURIComponent(tracker.siteId)}&days=${rangeDays}`, { cache: "no-store" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Não foi possível carregar os dados.");
       setSummary(result);
@@ -232,11 +234,11 @@ export default function UTMsPage() {
   useEffect(() => {
     if (activeTab !== "data" || !tracker.siteId) return;
     loadSummary();
-    const timer = window.setInterval(loadSummary, 15000);
+    const timer = window.setInterval(loadSummary, 5000);
     return () => window.clearInterval(timer);
   // Atualiza o painel enquanto a aba está aberta, sem exigir GA4.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, tracker.siteId]);
+  }, [activeTab, tracker.siteId, rangeDays]);
 
   const handleSave = async () => {
     if (!form.url || !form.source || !form.medium || !form.campaign) return;
@@ -277,6 +279,18 @@ export default function UTMsPage() {
   );
 
   const isFormValid = form.url && form.source && form.medium && form.campaign;
+  const funnelSteps = summary ? [
+    { key: "page_view", label: "Visitas", value: summary.totals.visits, color: "var(--blue)" },
+    { key: "generate_lead", label: "Leads", value: summary.totals.leads, color: "var(--green)" },
+    { key: "begin_checkout", label: "Checkout", value: summary.totals.checkouts, color: "var(--yellow)" },
+    { key: "purchase", label: "Compras", value: summary.totals.purchases, color: "var(--purple, #7c3aed)" },
+  ] : [];
+  const funnelRates = summary ? {
+    visitToLead: summary.totals.visits > 0 ? (summary.totals.leads / summary.totals.visits) * 100 : 0,
+    visitToCheckout: summary.totals.visits > 0 ? (summary.totals.checkouts / summary.totals.visits) * 100 : 0,
+    checkoutToPurchase: summary.totals.checkouts > 0 ? (summary.totals.purchases / summary.totals.checkouts) * 100 : 0,
+    visitToPurchase: summary.totals.visits > 0 ? (summary.totals.purchases / summary.totals.visits) * 100 : 0,
+  } : { visitToLead: 0, visitToCheckout: 0, checkoutToPurchase: 0, visitToPurchase: 0 };
 
   return (
     <div className="max-w-[1100px] mx-auto space-y-6">
@@ -717,12 +731,21 @@ export default function UTMsPage() {
             </div>
             <div className="flex-1">
               <h2 className="text-[15px] font-bold" style={{ color: "var(--text-1)" }}>Dados do seu site no Trackfy</h2>
-              <p className="text-[13px] mt-1" style={{ color: "var(--text-4)" }}>Últimos 30 dias. Estes números vêm do script instalado na sua página, não de estimativas das plataformas.</p>
+              <p className="text-[13px] mt-1" style={{ color: "var(--text-4)" }}>Números deduplicados por sessão/evento. Atualiza sozinho enquanto esta aba fica aberta.</p>
             </div>
+            <select value={rangeDays} onChange={(e) => setRangeDays(Number(e.target.value))} className="select w-full md:w-36">
+              <option value={1}>Hoje</option>
+              <option value={3}>3 dias</option>
+              <option value={7}>7 dias</option>
+              <option value={14}>14 dias</option>
+              <option value={30}>30 dias</option>
+              <option value={90}>90 dias</option>
+            </select>
             <button type="button" onClick={loadSummary} disabled={summaryLoading || !tracker.siteId} className="btn-secondary px-3 py-2">
               <RefreshCw className={`w-4 h-4 ${summaryLoading ? "animate-spin" : ""}`} strokeWidth={2.25} />
               {summaryLoading ? "Atualizando" : "Atualizar dados"}
             </button>
+            <span className="badge badge-green whitespace-nowrap">Ao vivo 5s</span>
           </div>
 
           {!summary && !summaryError && (
@@ -742,6 +765,50 @@ export default function UTMsPage() {
 
           {summary && (
             <>
+              <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4">
+                <div className="card p-5">
+                  <div className="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Funil em tempo real</h2>
+                      <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Período: últimos {rangeDays === 1 ? "1 dia" : `${rangeDays} dias`} · atualizado {new Date(summary.updatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</p>
+                    </div>
+                    <TrendingUp className="w-5 h-5" style={{ color: "var(--blue)" }} />
+                  </div>
+                  <div className="space-y-3">
+                    {funnelSteps.map((step) => {
+                      const max = Math.max(1, summary.totals.visits);
+                      const width = Math.max(4, Math.min(100, (step.value / max) * 100));
+                      return (
+                        <div key={step.key}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[12px] font-bold" style={{ color: "var(--text-2)" }}>{step.label}</span>
+                            <span className="text-[13px] font-bold tabular-nums" style={{ color: "var(--text-1)" }}>{step.value}</span>
+                          </div>
+                          <div className="h-3 rounded-full overflow-hidden" style={{ background: "var(--bg-muted)" }}>
+                            <div className="h-full rounded-full transition-all" style={{ width: `${width}%`, background: step.color }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: "Visita > Lead", value: funnelRates.visitToLead, hint: "captação" },
+                    { label: "Visita > Checkout", value: funnelRates.visitToCheckout, hint: "interesse forte" },
+                    { label: "Checkout > Compra", value: funnelRates.checkoutToPurchase, hint: "pagamento" },
+                    { label: "Visita > Compra", value: funnelRates.visitToPurchase, hint: "conversão final" },
+                  ].map((rate) => (
+                    <div key={rate.label} className="card p-4">
+                      <p className="text-[11px] font-semibold uppercase" style={{ color: "var(--text-4)" }}>{rate.label}</p>
+                      <p className="text-[24px] font-bold mt-1" style={{ color: rate.value > 0 ? "var(--green)" : "var(--text-1)" }}>{rate.value.toFixed(1)}%</p>
+                      <p className="text-[11px] mt-1" style={{ color: "var(--text-4)" }}>{rate.hint}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="card overflow-hidden">
                 <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
                   <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Validador do funil da oferta</h2>
@@ -782,7 +849,7 @@ export default function UTMsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead style={{ background: "var(--bg-subtle)" }}><tr>
-                      {["Fonte", "Visitas", "Leads", "Checkout", "Compras"].map((column) => <th key={column} className="px-5 py-3 text-[11px] font-bold uppercase" style={{ color: "var(--text-4)" }}>{column}</th>)}
+                      {["Fonte", "Visitas", "Leads", "Checkout", "Compras", "Checkout %"].map((column) => <th key={column} className="px-5 py-3 text-[11px] font-bold uppercase" style={{ color: "var(--text-4)" }}>{column}</th>)}
                     </tr></thead>
                     <tbody>{summary.channels.map((channel) => (
                       <tr key={channel.channel} className="border-t" style={{ borderColor: "var(--border)" }}>
@@ -791,6 +858,7 @@ export default function UTMsPage() {
                         <td className="px-5 py-3 text-[13px]" style={{ color: "var(--text-3)" }}>{channel.leads}</td>
                         <td className="px-5 py-3 text-[13px]" style={{ color: "var(--text-3)" }}>{channel.checkouts}</td>
                         <td className="px-5 py-3 text-[13px]" style={{ color: "var(--text-3)" }}>{channel.purchases}</td>
+                        <td className="px-5 py-3 text-[13px] font-semibold" style={{ color: channel.visits > 0 && channel.checkouts > 0 ? "var(--green)" : "var(--text-3)" }}>{channel.visits > 0 ? ((channel.checkouts / channel.visits) * 100).toFixed(1) : "0.0"}%</td>
                       </tr>
                     ))}</tbody>
                   </table>
@@ -820,7 +888,10 @@ export default function UTMsPage() {
                     {summary.campaigns.length === 0 ? <p className="px-5 py-8 text-[13px]" style={{ color: "var(--text-4)" }}>Nenhuma UTM recebida ainda.</p> : summary.campaigns.map((campaign) => (
                       <div key={`${campaign.source}-${campaign.medium}-${campaign.campaign}`} className="px-5 py-3 border-b" style={{ borderColor: "var(--border)" }}>
                         <p className="text-[13px] font-semibold truncate" style={{ color: "var(--text-2)" }}>{campaign.campaign}</p>
-                        <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>{campaign.source} / {campaign.medium} · {campaign.visits} visitas</p>
+                        <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>{campaign.source} / {campaign.medium} · {campaign.visits} visitas · {campaign.checkouts ?? 0} checkout · {campaign.purchases ?? 0} compras</p>
+                        <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--bg-muted)" }}>
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, campaign.visits > 0 ? ((campaign.checkouts ?? 0) / campaign.visits) * 100 : 0)}%`, background: "var(--green)" }} />
+                        </div>
                       </div>
                     ))}
                   </div>
