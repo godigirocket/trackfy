@@ -10,7 +10,7 @@ export function classifyTraffic(input: { source?: string | null; medium?: string
   const value = `${source} ${medium} ${referrer}`;
 
   if (/(cpc|ppc|paid|paid_social|display|banner|affiliate)/.test(value)) return "paid" as const;
-  if (medium === "organic" || SEARCH_ENGINES.some((domain) => referrer.includes(domain))) return "organic" as const;
+  if (source === "organic" || medium === "organic" || SEARCH_ENGINES.some((domain) => referrer.includes(domain) || source.includes(domain))) return "organic" as const;
   if (referrer || SOCIAL_NETWORKS.some((domain) => value.includes(domain))) return "referral" as const;
   if (source === "direct" || (!source && !referrer)) return "direct" as const;
   return "unknown" as const;

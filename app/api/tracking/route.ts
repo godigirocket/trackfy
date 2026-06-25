@@ -57,6 +57,34 @@ function cleanPageUrl(pageUrl: string | null, fallbackPath: string) {
   }
 }
 
+type TrackingRow = {
+  event_name: string;
+  event_id: string | null;
+  page_path: string;
+  page_url: string | null;
+  source: string;
+  medium: string;
+  campaign: string;
+  channel: string;
+  created_at: string;
+  value: number | null;
+};
+
+function uniqueRows(rows: TrackingRow[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const channel = classifyTraffic({ source: row.source, medium: row.medium, referrer: null });
+    row.channel = channel;
+    const bucket = Math.floor(new Date(row.created_at).getTime() / 2000);
+    const key = row.event_id
+      ? `${row.event_name}|${row.event_id}`
+      : `${row.event_name}|${row.page_path}|${row.source}|${row.medium}|${row.campaign}|${bucket}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export async function POST(request: NextRequest) {
   const supabase = trackingClient();
   if (!supabase) {
@@ -121,7 +149,7 @@ export async function GET(request: NextRequest) {
   // Permite publicar o painel antes de a migração de pedidos ser executada.
   const orders = orderError ? [] : orderData ?? [];
 
-  const rows = data ?? [];
+  const rows = uniqueRows((data ?? []) as TrackingRow[]);
   const eventCounts = ["page_view", "view_item", "generate_lead", "begin_checkout", "purchase"].reduce<Record<string, number>>((counts, eventName) => {
     counts[eventName] = eventName === "purchase"
       ? new Set(rows.filter((row) => row.event_name === eventName).map((row) => row.event_id).filter(Boolean)).size
