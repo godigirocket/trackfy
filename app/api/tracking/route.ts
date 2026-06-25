@@ -142,6 +142,11 @@ function uniquePurchaseCount(rows: TrackingRow[]) {
   return new Set(purchaseRows.map(sessionKey)).size;
 }
 
+function moneyValue(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : 0;
+}
+
 export async function POST(request: NextRequest) {
   const supabase = trackingClient();
   if (!supabase) {
@@ -175,6 +180,25 @@ export async function POST(request: NextRequest) {
     currency: validText(body.currency, 8) ? body.currency!.trim().toUpperCase() : "BRL",
   });
   if (error) return json({ error: "Não foi possível registrar o evento." }, { status: 500 });
+
+  if (event === "purchase") {
+    const transactionId = validText(body.eventId, 120)
+      ? body.eventId!.trim()
+      : `${body.siteId!.trim()}-${Date.now()}`;
+    await supabase.from("trackfy_orders").upsert({
+      site_id: body.siteId!.trim(),
+      transaction_id: transactionId,
+      status: "paid",
+      value: moneyValue(body.value),
+      currency: validText(body.currency, 8) ? body.currency!.trim().toUpperCase() : "BRL",
+      product: null,
+      source,
+      medium,
+      campaign: validText(body.campaign) ? body.campaign!.trim() : "(not set)",
+      channel: classifyTraffic({ source, medium, referrer }),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "site_id,transaction_id" });
+  }
   return json({ ok: true }, { status: 201 });
 }
 

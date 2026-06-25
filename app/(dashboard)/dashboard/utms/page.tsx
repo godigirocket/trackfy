@@ -134,7 +134,7 @@ function buildNativeTrackingSnippet(endpoint: string, siteId: string, measuremen
 type TrackingSummary = {
   updatedAt: string;
   range?: { days: number; since: string };
-  totals: { visits: number; visitors?: number; pageViews?: number; leads: number; checkouts: number; payments?: number; purchases: number; paidOrders?: number; revenue?: number; events?: number; attributedSessions?: number; attributedVisitors?: number };
+  totals: { visits: number; visitors?: number; pageViews?: number; leads: number; checkouts: number; payments?: number; purchases: number; paidOrders?: number; refundedOrders?: number; revenue?: number; refunds?: number; events?: number; attributedSessions?: number; attributedVisitors?: number };
   channels: Array<{ channel: TrafficChannel; visits: number; leads: number; checkouts: number; purchases: number; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
   pages: Array<{ path: string; url: string | null; visits: number; leads: number; checkouts: number; purchases: number; lastSeen: string }>;
   campaigns: Array<{ source: string; medium: string; campaign: string; visits: number; leads?: number; checkouts?: number; purchases?: number; lastSeen: string; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
@@ -317,9 +317,14 @@ export default function UTMsPage() {
   const attributedVisitors = summary?.totals.attributedVisitors ?? attributedSessions;
   const attributionRate = visitorCount > 0 ? (attributedVisitors / visitorCount) * 100 : 0;
   const revenue = summary?.totals.revenue ?? 0;
+  const refunds = summary?.totals.refunds ?? 0;
+  const netRevenue = Math.max(0, revenue - refunds);
   const paidOrders = summary?.totals.paidOrders ?? 0;
+  const averageOrder = paidOrders > 0 ? revenue / paidOrders : 0;
+  const revenuePerSession = summary && summary.totals.visits > 0 ? revenue / summary.totals.visits : 0;
   const paymentCount = summary?.totals.payments ?? summary?.eventCounts?.add_payment_info ?? 0;
   const checkoutGap = summary ? Math.max(0, summary.totals.checkouts - summary.totals.purchases) : 0;
+  const purchaseWithoutValue = summary ? summary.totals.purchases > 0 && revenue <= 0 : false;
   const sessionWord = (count: number) => count === 1 ? "sessão" : "sessões";
   const reachedText = (count: number) => count === 1 ? "chegou" : "chegaram";
   const openedText = (count: number) => count === 1 ? "abriu" : "abriram";
@@ -805,6 +810,93 @@ export default function UTMsPage() {
 
           {summary && (
             <>
+              <div className="rounded-2xl overflow-hidden border" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+                <div className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #111827 58%, #1f2937 100%)" }}>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: "#93c5fd" }}>Performance da oferta</p>
+                    <h2 className="text-[18px] font-bold mt-1 text-white">{tracker.name || "Oferta selecionada"}</h2>
+                    <p className="text-[12px] mt-1 text-slate-300">{tracker.websiteUrl || "Site sem URL cadastrada"} · últimos {rangeDays === 1 ? "1 dia" : `${rangeDays} dias`}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full px-3 py-1 text-[11px] font-bold text-emerald-200" style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)" }}>Atualiza 5s</span>
+                    <span className="rounded-full px-3 py-1 text-[11px] font-bold text-slate-200" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>Site ID: {tracker.siteId.slice(0, 8)}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-6 divide-x divide-y lg:divide-y-0" style={{ borderColor: "var(--border)" }}>
+                  {[
+                    { label: "Receita", value: revenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), detail: refunds > 0 ? `${refunds.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} reembolso` : "pedidos pagos", color: "var(--green)" },
+                    { label: "Lucro líquido", value: netRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), detail: "receita - reembolso", color: netRevenue > 0 ? "var(--green)" : "var(--text-2)" },
+                    { label: "Pedidos", value: paidOrders, detail: `${summary.totals.purchases} evento${summary.totals.purchases === 1 ? "" : "s"} purchase`, color: "var(--blue)" },
+                    { label: "Sessões", value: summary.totals.visits, detail: `${pageViewCount} pageviews`, color: "var(--blue)" },
+                    { label: "Ticket médio", value: averageOrder.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), detail: "por pedido pago", color: "var(--yellow)" },
+                    { label: "RPS", value: revenuePerSession.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), detail: "receita por sessão", color: "var(--green)" },
+                  ].map((metric) => (
+                    <div key={metric.label} className="p-4 min-h-[116px]">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[11px] font-bold uppercase" style={{ color: "var(--text-4)" }}>{metric.label}</p>
+                        <span className="w-2 h-2 rounded-full" style={{ background: metric.color }} />
+                      </div>
+                      <p className="text-[22px] font-bold mt-2 tabular-nums" style={{ color: "var(--text-1)" }}>{metric.value}</p>
+                      <p className="text-[11px] mt-1" style={{ color: "var(--text-4)" }}>{metric.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {purchaseWithoutValue && (
+                <div className="rounded-xl p-4 flex flex-col md:flex-row md:items-center gap-3" style={{ background: "var(--yellow-light)", border: "1px solid rgba(202,138,4,0.18)" }}>
+                  <AlertTriangle className="w-5 h-5 shrink-0" style={{ color: "var(--yellow)" }} strokeWidth={2.35} />
+                  <div className="flex-1">
+                    <p className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>Compra recebida sem valor financeiro</p>
+                    <p className="text-[12px] mt-1 leading-relaxed" style={{ color: "var(--text-3)" }}>O Trackfy recebeu o evento de compra, mas o script ou checkout não enviou <code>value</code>. Para faturamento ficar certo, dispare <code>trackfyPurchase(&#123;transaction_id, value, currency: "BRL"&#125;)</code> na página de obrigado ou use o webhook de venda aprovada.</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 border-b" style={{ borderColor: "var(--border)" }}>
+                  <div>
+                    <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Campanhas por resultado</h2>
+                    <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Visual principal para decidir onde subir verba, pausar criativo ou revisar tracking.</p>
+                  </div>
+                  <span className="badge badge-blue">{summary.campaigns.length} origem{summary.campaigns.length === 1 ? "" : "s"} recebida{summary.campaigns.length === 1 ? "" : "s"}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead style={{ background: "var(--bg-subtle)" }}>
+                      <tr>
+                        {["Campanha", "Fonte", "Sessões", "Checkout", "Compras", "Receita", "CVR", "Último sinal"].map((column) => (
+                          <th key={column} className="px-5 py-3 text-[11px] font-bold uppercase whitespace-nowrap" style={{ color: "var(--text-4)" }}>{column}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summary.campaigns.length === 0 ? (
+                        <tr><td colSpan={8} className="px-5 py-8 text-[13px]" style={{ color: "var(--text-4)" }}>Nenhuma UTM chegou nesta oferta ainda.</td></tr>
+                      ) : summary.campaigns.map((campaign) => {
+                        const campaignRevenue = campaign.revenue ?? 0;
+                        const cvr = campaign.visits > 0 ? ((campaign.purchases ?? 0) / campaign.visits) * 100 : 0;
+                        return (
+                          <tr key={`${campaign.source}-${campaign.medium}-${campaign.campaign}`} className="border-t" style={{ borderColor: "var(--border)" }}>
+                            <td className="px-5 py-3 min-w-[190px]">
+                              <p className="text-[13px] font-bold truncate max-w-[240px]" style={{ color: "var(--text-1)" }} title={campaign.campaign}>{campaign.campaign}</p>
+                              <p className="text-[11px] mt-0.5" style={{ color: "var(--text-4)" }}>{campaign.source}/{campaign.medium}</p>
+                            </td>
+                            <td className="px-5 py-3"><span className="badge badge-neutral">{campaign.source}</span></td>
+                            <td className="px-5 py-3 text-[13px] tabular-nums" style={{ color: "var(--text-2)" }}>{campaign.visits}</td>
+                            <td className="px-5 py-3 text-[13px] tabular-nums" style={{ color: "var(--text-2)" }}>{campaign.checkouts ?? 0}</td>
+                            <td className="px-5 py-3 text-[13px] tabular-nums font-bold" style={{ color: (campaign.purchases ?? 0) > 0 ? "var(--green)" : "var(--text-2)" }}>{campaign.purchases ?? 0}</td>
+                            <td className="px-5 py-3 text-[13px] tabular-nums font-bold" style={{ color: campaignRevenue > 0 ? "var(--green)" : "var(--text-2)" }}>{campaignRevenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+                            <td className="px-5 py-3 text-[13px] tabular-nums" style={{ color: cvr > 0 ? "var(--green)" : "var(--text-3)" }}>{cvr.toFixed(1)}%</td>
+                            <td className="px-5 py-3 text-[12px] whitespace-nowrap" style={{ color: "var(--text-4)" }}>{new Date(campaign.lastSeen).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
                 {[
                   { label: "Visitantes únicos", value: visitorCount, detail: "Mesmo navegador conta uma vez", tone: "var(--blue)" },
