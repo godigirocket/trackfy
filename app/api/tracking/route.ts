@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { classifyTraffic } from "@/lib/tracking";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,7 +12,14 @@ const corsHeaders = {
 };
 
 function json(body: unknown, init?: ResponseInit) {
-  return NextResponse.json(body, { ...init, headers: { ...corsHeaders, ...(init?.headers ?? {}) } });
+  return NextResponse.json(body, {
+    ...init,
+    headers: {
+      ...corsHeaders,
+      "Cache-Control": "no-store, max-age=0",
+      ...(init?.headers ?? {}),
+    },
+  });
 }
 
 type TrackingPayload = {
@@ -85,6 +93,13 @@ function uniqueRows(rows: TrackingRow[]) {
   });
 }
 
+function isInternalTest(row: TrackingRow) {
+  const campaign = row.campaign.trim().toLowerCase();
+  return campaign.startsWith("trackfy_")
+    || campaign.includes("browser_check")
+    || ["manual-cors-check", "pixel-endpoint-test", "reset_test"].includes(campaign);
+}
+
 function sessionKey(row: TrackingRow) {
   if (row.event_id?.includes("|")) return row.event_id.split("|")[0];
   return row.event_id || `${row.source}|${row.medium}|${row.campaign}|${row.created_at.slice(0, 16)}`;
@@ -92,6 +107,17 @@ function sessionKey(row: TrackingRow) {
 
 function uniqueSessionCount(rows: TrackingRow[]) {
   return new Set(rows.filter((row) => row.event_name === "page_view").map(sessionKey)).size;
+}
+
+function uniqueEventSessionCount(rows: TrackingRow[], eventName: string) {
+  return new Set(rows.filter((row) => row.event_name === eventName).map(sessionKey)).size;
+}
+
+function uniquePurchaseCount(rows: TrackingRow[]) {
+  const purchaseRows = rows.filter((row) => row.event_name === "purchase");
+  const withId = purchaseRows.map((row) => row.event_id).filter(Boolean);
+  if (withId.length) return new Set(withId).size;
+  return new Set(purchaseRows.map(sessionKey)).size;
 }
 
 export async function POST(request: NextRequest) {
@@ -160,11 +186,15 @@ export async function GET(request: NextRequest) {
   // Permite publicar o painel antes de a migração de pedidos ser executada.
   const orders = orderError ? [] : orderData ?? [];
 
-  const rows = uniqueRows((data ?? []) as TrackingRow[]);
-  const eventCounts = ["page_view", "view_item", "generate_lead", "begin_checkout", "purchase"].reduce<Record<string, number>>((counts, eventName) => {
+  const rows = uniqueRows(((data ?? []) as TrackingRow[]).filter((row) => !isInternalTest(row)));
+  const pageViews = rows.filter((row) => row.event_name === "page_view").length;
+  const attributedSessions = uniqueSessionCount(rows.filter((row) => row.channel !== "direct" && row.channel !== "unknown"));
+  const eventCounts = ["page_view", "view_item", "generate_lead", "begin_checkout", "add_payment_info", "purchase"].reduce<Record<string, number>>((counts, eventName) => {
     counts[eventName] = eventName === "purchase"
-      ? new Set(rows.filter((row) => row.event_name === eventName).map((row) => row.event_id).filter(Boolean)).size
-      : rows.filter((row) => row.event_name === eventName).length;
+      ? uniquePurchaseCount(rows)
+      : eventName === "page_view"
+        ? uniqueSessionCount(rows)
+        : uniqueEventSessionCount(rows, eventName);
     return counts;
   }, {});
   const channels = ["paid", "organic", "referral", "direct", "unknown"].map((channel) => {
@@ -174,9 +204,9 @@ export async function GET(request: NextRequest) {
     const visits = uniqueSessionCount(rows.filter((row) => row.channel === channel));
     return {
       channel, visits,
-      leads: rows.filter((row) => row.event_name === "generate_lead" && row.channel === channel).length,
-      checkouts: rows.filter((row) => row.event_name === "begin_checkout" && row.channel === channel).length,
-      purchases: new Set(rows.filter((row) => row.event_name === "purchase" && row.channel === channel).map((row) => row.event_id).filter(Boolean)).size,
+      leads: uniqueEventSessionCount(rows.filter((row) => row.channel === channel), "generate_lead"),
+      checkouts: uniqueEventSessionCount(rows.filter((row) => row.channel === channel), "begin_checkout"),
+      purchases: uniquePurchaseCount(rows.filter((row) => row.channel === channel)),
       paidOrders: channelOrders.filter((order) => order.status === "paid").length,
       refunds: channelOrders.filter((order) => order.status === "refunded").length,
       revenue, netRevenue: revenue - refunds, conversionRate: visits > 0 ? (channelOrders.filter((order) => order.status === "paid").length / visits) * 100 : 0,
@@ -208,17 +238,22 @@ export async function GET(request: NextRequest) {
     const refunds = campaignOrders.filter((order) => order.status === "refunded").reduce((sum, order) => sum + Number(order.value), 0);
     const paidOrders = campaignOrders.filter((order) => order.status === "paid").length;
     const visits = (campaign as any).sessionKeys?.size ?? campaign.visits;
+    const campaignRows = rows.filter((row) => row.source === campaign.source && row.medium === campaign.medium && row.campaign === campaign.campaign);
     const { sessionKeys, ...cleanCampaign } = campaign as any;
-    return { ...cleanCampaign, visits, paidOrders, refunds: campaignOrders.filter((order) => order.status === "refunded").length, revenue, netRevenue: revenue - refunds, conversionRate: visits > 0 ? (paidOrders / visits) * 100 : 0, averageOrder: paidOrders > 0 ? revenue / paidOrders : 0 };
+    return { ...cleanCampaign, visits, leads: uniqueEventSessionCount(campaignRows, "generate_lead"), checkouts: uniqueEventSessionCount(campaignRows, "begin_checkout"), purchases: uniquePurchaseCount(campaignRows), paidOrders, refunds: campaignOrders.filter((order) => order.status === "refunded").length, revenue, netRevenue: revenue - refunds, conversionRate: visits > 0 ? (paidOrders / visits) * 100 : 0, averageOrder: paidOrders > 0 ? revenue / paidOrders : 0 };
   }).sort((a, b) => b.netRevenue - a.netRevenue || b.visits - a.visits).slice(0, 50);
   return json({
     updatedAt: new Date().toISOString(),
     range: { days, since },
     totals: {
       visits: uniqueSessionCount(rows),
-      leads: rows.filter((row) => row.event_name === "generate_lead").length,
-      checkouts: rows.filter((row) => row.event_name === "begin_checkout").length,
-      purchases: new Set(rows.filter((row) => row.event_name === "purchase").map((row) => row.event_id).filter(Boolean)).size,
+      pageViews,
+      leads: uniqueEventSessionCount(rows, "generate_lead"),
+      checkouts: uniqueEventSessionCount(rows, "begin_checkout"),
+      payments: uniqueEventSessionCount(rows, "add_payment_info"),
+      purchases: uniquePurchaseCount(rows),
+      events: rows.length,
+      attributedSessions,
       paidOrders: orders.filter((order) => order.status === "paid").length,
       refundedOrders: orders.filter((order) => order.status === "refunded").length,
       revenue: orders.filter((order) => order.status === "paid").reduce((sum, order) => sum + Number(order.value), 0),

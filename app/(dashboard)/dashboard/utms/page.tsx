@@ -134,7 +134,7 @@ function buildNativeTrackingSnippet(endpoint: string, siteId: string, measuremen
 type TrackingSummary = {
   updatedAt: string;
   range?: { days: number; since: string };
-  totals: { visits: number; leads: number; checkouts: number; purchases: number; paidOrders?: number; revenue?: number };
+  totals: { visits: number; pageViews?: number; leads: number; checkouts: number; payments?: number; purchases: number; paidOrders?: number; revenue?: number; events?: number; attributedSessions?: number };
   channels: Array<{ channel: TrafficChannel; visits: number; leads: number; checkouts: number; purchases: number; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
   pages: Array<{ path: string; url: string | null; visits: number; leads: number; checkouts: number; purchases: number; lastSeen: string }>;
   campaigns: Array<{ source: string; medium: string; campaign: string; visits: number; leads?: number; checkouts?: number; purchases?: number; lastSeen: string; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
@@ -280,9 +280,10 @@ export default function UTMsPage() {
 
   const isFormValid = form.url && form.source && form.medium && form.campaign;
   const funnelSteps = summary ? [
-    { key: "page_view", label: "Visitas", value: summary.totals.visits, color: "var(--blue)" },
+    { key: "page_view", label: "Sessões", value: summary.totals.visits, color: "var(--blue)" },
     { key: "generate_lead", label: "Leads", value: summary.totals.leads, color: "var(--green)" },
     { key: "begin_checkout", label: "Checkout", value: summary.totals.checkouts, color: "var(--yellow)" },
+    { key: "add_payment_info", label: "Pagamento", value: summary.totals.payments ?? 0, color: "#f97316" },
     { key: "purchase", label: "Compras", value: summary.totals.purchases, color: "var(--purple, #7c3aed)" },
   ] : [];
   const funnelRates = summary ? {
@@ -291,6 +292,13 @@ export default function UTMsPage() {
     checkoutToPurchase: summary.totals.checkouts > 0 ? (summary.totals.purchases / summary.totals.checkouts) * 100 : 0,
     visitToPurchase: summary.totals.visits > 0 ? (summary.totals.purchases / summary.totals.visits) * 100 : 0,
   } : { visitToLead: 0, visitToCheckout: 0, checkoutToPurchase: 0, visitToPurchase: 0 };
+  const pageViewCount = summary?.totals.pageViews ?? summary?.eventCounts?.page_view ?? 0;
+  const attributedSessions = summary?.totals.attributedSessions ?? 0;
+  const attributionRate = summary && summary.totals.visits > 0 ? (attributedSessions / summary.totals.visits) * 100 : 0;
+  const revenue = summary?.totals.revenue ?? 0;
+  const paidOrders = summary?.totals.paidOrders ?? 0;
+  const paymentCount = summary?.totals.payments ?? summary?.eventCounts?.add_payment_info ?? 0;
+  const checkoutGap = summary ? Math.max(0, summary.totals.checkouts - summary.totals.purchases) : 0;
 
   return (
     <div className="max-w-[1100px] mx-auto space-y-6">
@@ -731,7 +739,7 @@ export default function UTMsPage() {
             </div>
             <div className="flex-1">
               <h2 className="text-[15px] font-bold" style={{ color: "var(--text-1)" }}>Dados do seu site no Trackfy</h2>
-              <p className="text-[13px] mt-1" style={{ color: "var(--text-4)" }}>Números deduplicados por sessão/evento. Atualiza sozinho enquanto esta aba fica aberta.</p>
+              <p className="text-[13px] mt-1" style={{ color: "var(--text-4)" }}>Sessões únicas, funil consolidado e páginas separadas por visualização. Atualiza sozinho enquanto esta aba fica aberta.</p>
             </div>
             <select value={rangeDays} onChange={(e) => setRangeDays(Number(e.target.value))} className="select w-full md:w-36">
               <option value={1}>Hoje</option>
@@ -765,6 +773,83 @@ export default function UTMsPage() {
 
           {summary && (
             <>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                {[
+                  { label: "Sessões únicas", value: summary.totals.visits, detail: "Pessoas/janelas únicas no período", tone: "var(--blue)" },
+                  { label: "Pageviews", value: pageViewCount, detail: "Todas as páginas abertas no funil", tone: "var(--green)" },
+                  { label: "Origem identificada", value: `${attributionRate.toFixed(0)}%`, detail: `${attributedSessions} sessões com UTM, busca ou referência`, tone: attributionRate >= 70 ? "var(--green)" : "var(--yellow)" },
+                  { label: "Faturamento confirmado", value: revenue > 0 ? revenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "R$ 0,00", detail: `${paidOrders} pedido${paidOrders === 1 ? "" : "s"} pago${paidOrders === 1 ? "" : "s"}`, tone: revenue > 0 ? "var(--green)" : "var(--text-2)" },
+                ].map((metric) => (
+                  <div key={metric.label} className="card p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[12px] font-semibold" style={{ color: "var(--text-4)" }}>{metric.label}</p>
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: metric.tone }} />
+                    </div>
+                    <p className="text-[25px] font-bold mt-2 tabular-nums" style={{ color: "var(--text-1)" }}>{metric.value}</p>
+                    <p className="text-[11px] mt-1 leading-relaxed" style={{ color: "var(--text-4)" }}>{metric.detail}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="lg:col-span-2 card p-5">
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Diagnóstico rápido</h2>
+                      <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>O Trackfy compara os eventos recebidos e mostra onde o funil ainda precisa de marcação.</p>
+                    </div>
+                    <Activity className="w-5 h-5" style={{ color: "var(--blue)" }} strokeWidth={2.25} />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {[
+                      {
+                        title: summary.totals.visits > 0 ? "Script instalado" : "Sem tráfego ainda",
+                        status: summary.totals.visits > 0 ? "OK" : "Aguardando",
+                        text: summary.totals.visits > 0 ? "A landing já está enviando page_view para o Trackfy." : "Abra uma URL com UTM depois de instalar o script.",
+                        color: summary.totals.visits > 0 ? "var(--green)" : "var(--yellow)",
+                      },
+                      {
+                        title: summary.totals.checkouts > 0 ? "Checkout marcado" : "Checkout zerado",
+                        status: summary.totals.checkouts > 0 ? "OK" : "Falta",
+                        text: summary.totals.checkouts > 0 ? `${summary.totals.checkouts} sessão${summary.totals.checkouts === 1 ? "" : "ões"} chegou${summary.totals.checkouts === 1 ? "" : "ram"} ao checkout.` : "Use data-trackfy-funnel=\"begin_checkout\" no botão certo.",
+                        color: summary.totals.checkouts > 0 ? "var(--green)" : "var(--yellow)",
+                      },
+                      {
+                        title: summary.totals.purchases > 0 ? "Compra confirmada" : paymentCount > 0 ? "Pagamento aberto" : "Compra ainda não chegou",
+                        status: summary.totals.purchases > 0 ? "OK" : checkoutGap > 0 ? "Atenção" : "Falta",
+                        text: summary.totals.purchases > 0 ? "O Trackfy já recebeu evento de compra aprovada." : paymentCount > 0 ? `${paymentCount} sessão${paymentCount === 1 ? "" : "ões"} abriu${paymentCount === 1 ? "" : "ram"} pagamento/Pix, mas ainda sem purchase.` : checkoutGap > 0 ? `${checkoutGap} checkout sem purchase. A compra precisa vir do obrigado/webhook.` : "Dispare trackfyPurchase apenas após pagamento aprovado.",
+                        color: summary.totals.purchases > 0 ? "var(--green)" : checkoutGap > 0 ? "var(--yellow)" : "var(--text-4)",
+                      },
+                    ].map((item) => (
+                      <div key={item.title} className="rounded-lg p-4" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[12px] font-bold" style={{ color: "var(--text-2)" }}>{item.title}</p>
+                          <span className="text-[10px] font-bold uppercase px-2 py-1 rounded-full" style={{ background: `${item.color}18`, color: item.color }}>{item.status}</span>
+                        </div>
+                        <p className="text-[12px] leading-relaxed mt-2" style={{ color: "var(--text-4)" }}>{item.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="card p-5">
+                  <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Leitura correta</h2>
+                  <div className="space-y-3 mt-4">
+                    {[
+                      ["Sessões", "quantas visitas únicas entraram."],
+                      ["Pageviews", "quantas páginas foram abertas."],
+                      ["Checkout", "sessões que clicaram/chegaram no pagamento."],
+                      ["Compra", "só vale quando o pagamento foi confirmado."],
+                    ].map(([label, text]) => (
+                      <div key={label} className="flex gap-3">
+                        <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "var(--green)" }} strokeWidth={2.5} />
+                        <p className="text-[12px] leading-relaxed" style={{ color: "var(--text-3)" }}><strong style={{ color: "var(--text-1)" }}>{label}:</strong> {text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4">
                 <div className="card p-5">
                   <div className="flex items-center justify-between gap-3 mb-5">
@@ -795,10 +880,10 @@ export default function UTMsPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: "Visita > Lead", value: funnelRates.visitToLead, hint: "captação" },
-                    { label: "Visita > Checkout", value: funnelRates.visitToCheckout, hint: "interesse forte" },
+                    { label: "Sessão > Lead", value: funnelRates.visitToLead, hint: "captação" },
+                    { label: "Sessão > Checkout", value: funnelRates.visitToCheckout, hint: "interesse forte" },
                     { label: "Checkout > Compra", value: funnelRates.checkoutToPurchase, hint: "pagamento" },
-                    { label: "Visita > Compra", value: funnelRates.visitToPurchase, hint: "conversão final" },
+                    { label: "Sessão > Compra", value: funnelRates.visitToPurchase, hint: "conversão final" },
                   ].map((rate) => (
                     <div key={rate.label} className="card p-4">
                       <p className="text-[11px] font-semibold uppercase" style={{ color: "var(--text-4)" }}>{rate.label}</p>
@@ -811,15 +896,16 @@ export default function UTMsPage() {
 
               <div className="card overflow-hidden">
                 <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
-                  <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Validador do funil da oferta</h2>
-                  <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Mostra eventos realmente recebidos. Etapa zerada significa que ela ainda não foi instalada ou acionada no site.</p>
+                  <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Saúde do tracking</h2>
+                  <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Mostra sessões/eventos consolidados. Etapa zerada significa que ela ainda não foi instalada ou acionada no site.</p>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x" style={{ borderColor: "var(--border)" }}>
+                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 divide-y md:divide-y-0 md:divide-x" style={{ borderColor: "var(--border)" }}>
                   {[
-                    { event: "page_view", label: "Página aberta", fix: "O script Trackfy no head envia automaticamente." },
+                    { event: "page_view", label: "Sessão aberta", fix: "O script Trackfy no head envia automaticamente." },
                     { event: "view_item", label: "Oferta vista", fix: "Marque o CTA/área com data-trackfy-funnel=\"view_item\"." },
                     { event: "generate_lead", label: "Lead confirmado", fix: "Dispare trackfyEvent após sucesso real do formulário." },
                     { event: "begin_checkout", label: "Checkout iniciado", fix: "Marque o botão de pagamento com begin_checkout." },
+                    { event: "add_payment_info", label: "Pix/pagamento", fix: "Dispare add_payment_info ao abrir Pix ou cartão." },
                     { event: "purchase", label: "Compra aprovada", fix: "Dispare trackfyPurchase somente após confirmação real." },
                   ].map((step) => {
                     const count = summary.eventCounts?.[step.event] ?? 0;
@@ -827,12 +913,13 @@ export default function UTMsPage() {
                   })}
                 </div>
               </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                 {[
-                  { label: "Visitas", value: summary.totals.visits, detail: "page_view" },
-                  { label: "Leads", value: summary.totals.leads, detail: "generate_lead" },
-                  { label: "Checkout", value: summary.totals.checkouts, detail: "begin_checkout" },
-                  { label: "Compras", value: summary.totals.purchases, detail: "purchase confirmado" },
+                  { label: "Sessões", value: summary.totals.visits, detail: "pessoas/sessões únicas" },
+                  { label: "Leads", value: summary.totals.leads, detail: "sessões com lead" },
+                  { label: "Checkout", value: summary.totals.checkouts, detail: "sessões com checkout" },
+                  { label: "Pagamento", value: paymentCount, detail: "pix/cartão aberto" },
+                  { label: "Compras", value: summary.totals.purchases, detail: "pedido confirmado" },
                 ].map((metric) => (
                   <div key={metric.label} className="card p-4">
                     <p className="text-[12px] font-semibold" style={{ color: "var(--text-4)" }}>{metric.label}</p>
@@ -849,7 +936,7 @@ export default function UTMsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead style={{ background: "var(--bg-subtle)" }}><tr>
-                      {["Fonte", "Visitas", "Leads", "Checkout", "Compras", "Checkout %"].map((column) => <th key={column} className="px-5 py-3 text-[11px] font-bold uppercase" style={{ color: "var(--text-4)" }}>{column}</th>)}
+                      {["Fonte", "Sessões", "Leads", "Checkout", "Compras", "Checkout %"].map((column) => <th key={column} className="px-5 py-3 text-[11px] font-bold uppercase" style={{ color: "var(--text-4)" }}>{column}</th>)}
                     </tr></thead>
                     <tbody>{summary.channels.map((channel) => (
                       <tr key={channel.channel} className="border-t" style={{ borderColor: "var(--border)" }}>
@@ -868,13 +955,13 @@ export default function UTMsPage() {
                 <div className="card overflow-hidden">
                   <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
                     <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Páginas rastreadas</h2>
-                    <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Uma página aparece aqui assim que alguém abre uma página que tem o script Trackfy instalado.</p>
+                    <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Aqui são visualizações de página. Uma mesma sessão pode passar por home, checkout e pix.</p>
                   </div>
                   <div className="max-h-[390px] overflow-auto">
                     {summary.pages.length === 0 ? <p className="px-5 py-8 text-[13px]" style={{ color: "var(--text-4)" }}>Nenhuma página recebeu visita ainda.</p> : summary.pages.map((page) => (
                       <div key={page.url || page.path} className="px-5 py-3 border-b" style={{ borderColor: "var(--border)" }}>
                         <p className="font-mono text-[12px] truncate" title={page.url || page.path} style={{ color: "var(--text-2)" }}>{page.url || page.path}</p>
-                        <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>{page.visits} visitas · {page.leads} leads · {page.checkouts} checkout · {page.purchases} compras</p>
+                        <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>{page.visits} visualizações · {page.leads} leads · {page.checkouts} checkout · {page.purchases} compras</p>
                       </div>
                     ))}
                   </div>
@@ -882,13 +969,13 @@ export default function UTMsPage() {
                 <div className="card overflow-hidden">
                   <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
                     <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>UTMs e campanhas recebidas</h2>
-                    <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Mostra somente UTMs que chegaram de verdade ao seu site.</p>
+                    <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Sessões por campanha recebidas de verdade no site.</p>
                   </div>
                   <div className="max-h-[390px] overflow-auto">
                     {summary.campaigns.length === 0 ? <p className="px-5 py-8 text-[13px]" style={{ color: "var(--text-4)" }}>Nenhuma UTM recebida ainda.</p> : summary.campaigns.map((campaign) => (
                       <div key={`${campaign.source}-${campaign.medium}-${campaign.campaign}`} className="px-5 py-3 border-b" style={{ borderColor: "var(--border)" }}>
                         <p className="text-[13px] font-semibold truncate" style={{ color: "var(--text-2)" }}>{campaign.campaign}</p>
-                        <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>{campaign.source} / {campaign.medium} · {campaign.visits} visitas · {campaign.checkouts ?? 0} checkout · {campaign.purchases ?? 0} compras</p>
+                        <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>{campaign.source} / {campaign.medium} · {campaign.visits} sessões · {campaign.checkouts ?? 0} checkout · {campaign.purchases ?? 0} compras</p>
                         <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--bg-muted)" }}>
                           <div className="h-full rounded-full" style={{ width: `${Math.min(100, campaign.visits > 0 ? ((campaign.checkouts ?? 0) / campaign.visits) * 100 : 0)}%`, background: "var(--green)" }} />
                         </div>
@@ -899,7 +986,7 @@ export default function UTMsPage() {
               </div>
               <div className="card overflow-hidden">
                 <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: "var(--border)" }}>
-                  <div><h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Atividade recente</h2><p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Atualiza a cada 15 segundos enquanto esta aba estiver aberta.</p></div>
+                  <div><h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Atividade recente</h2><p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Atualiza a cada 5 segundos enquanto esta aba estiver aberta.</p></div>
                   <span className="badge badge-blue">Ao vivo</span>
                 </div>
                 <div className="max-h-[340px] overflow-auto">
