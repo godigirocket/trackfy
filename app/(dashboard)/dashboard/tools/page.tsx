@@ -34,9 +34,19 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Tab = "keywords" | "prospector" | "spy" | "offer" | "copy" | "whatsapp" | "zap" | "calendar" | "funnel" | "abtest" | "roi" | "url" | "image" | "pix" | "compliance" | "contingency";
+type Tab = "arsenal" | "keywords" | "prospector" | "spy" | "offer" | "copy" | "whatsapp" | "zap" | "calendar" | "funnel" | "abtest" | "roi" | "url" | "image" | "pix" | "compliance" | "contingency";
 
 const TOOL_TUTORIALS: Record<Tab, { title: string; steps: string[]; tip: string }> = {
+  arsenal: {
+    title: "Como usar Arsenal 100",
+    steps: [
+      "Escolha uma ferramenta por objetivo: vídeo, copy, funil, pesquisa, criativo, produto ou operação.",
+      "Preencha contexto, oferta e canal para o Trackfy montar o prompt/brief.",
+      "Use Gerar com IA quando tiver chave configurada ou copie o prompt para usar com sua própria API.",
+      "Salve os melhores outputs como roteiro, checklist, criativo ou hipótese de teste.",
+    ],
+    tip: "A versão barata pode vender volume: muitas ferramentas locais + IA opcional por chave do cliente para não estourar custo.",
+  },
   keywords: {
     title: "Como usar Keywords",
     steps: [
@@ -199,6 +209,45 @@ const TOOL_TUTORIALS: Record<Tab, { title: string; steps: string[]; tip: string 
   },
 };
 
+const MEGA_TOOLS = [
+  "Roteiro de vídeo curto", "Hook de Reels", "Hook de TikTok", "Roteiro UGC", "VSL curta", "VSL longa", "Storyboard de anúncio", "Prompt para avatar IA", "Prompt para imagem IA", "Prompt para vídeo IA",
+  "Ideias de criativo", "Variações de thumbnail", "Análise de criativo vencedor", "Checklist de criativo", "Ângulos de dor", "Ângulos de desejo", "Ângulos de prova", "Ângulos de objeção", "CTA para anúncio", "Legenda para criativo",
+  "Headline de landing", "Subheadline", "Oferta irresistível", "Stack de bônus", "Garantia", "FAQ de objeções", "Copy de checkout", "Copy de upsell", "Copy de downsell", "Copy de obrigado",
+  "Sequência WhatsApp", "Follow-up 24h", "Follow-up 72h", "Recuperação de checkout", "Mensagem de Pix pendente", "Script de call", "DM Instagram", "Resposta para objeção preço", "Resposta para objeção confiança", "Script de fechamento",
+  "Keywords Google", "Negativas Google", "Grupos de anúncio", "Termos fundo de funil", "Termos meio de funil", "Ideias TikTok Search", "Ideias YouTube", "Perguntas do público", "Cluster SEO", "Título de artigo SEO",
+  "Spy Meta", "Spy TikTok", "Spy Google", "Mapa de concorrentes", "Matriz de promessas", "Biblioteca de provas", "Tabela de diferenciais", "Análise de página concorrente", "Brief de modelagem", "Radar de tendência",
+  "Funil AIDA", "Funil PAS", "Funil direct offer", "Funil low ticket", "Funil tripwire", "Funil WhatsApp", "Funil lançamento simples", "Funil perpétuo", "Mapa de eventos", "Plano de teste 7 dias",
+  "Calculadora CPA", "Simulador ROAS", "Break-even CPC", "Meta de margem", "Orçamento por campanha", "Plano de escala", "Plano de corte", "Leitura de métricas", "Diagnóstico de ROI", "Relatório executivo",
+  "Checklist compliance Meta", "Checklist compliance Google", "Auditoria de promessas", "Auditoria de página", "Auditoria de checkout", "Política de privacidade base", "Termos base", "Aviso de risco", "Checklist domínio", "Checklist pixel/tag",
+  "Prospector local", "Pitch para comércio", "Email frio", "Proposta de serviço", "Diagnóstico de negócio", "Script de reunião", "Plano de entrega", "Onboarding cliente", "Relatório cliente", "Renovação/upsell",
+] as const;
+
+function toolCategory(index: number) {
+  if (index < 10) return "Vídeo IA";
+  if (index < 20) return "Criativos";
+  if (index < 30) return "Landing";
+  if (index < 40) return "WhatsApp";
+  if (index < 50) return "Keywords";
+  if (index < 60) return "Spy";
+  if (index < 70) return "Funil";
+  if (index < 80) return "Métricas";
+  if (index < 90) return "Compliance";
+  return "Vendas B2B";
+}
+
+function buildMegaPrompt(tool: string, context: string, channel: string, offer: string) {
+  return [
+    `Ferramenta: ${tool}`,
+    `Canal: ${channel || "digital"}`,
+    `Oferta/produto: ${offer || "produto digital ou serviço"}`,
+    `Contexto: ${context || "iniciante no digital, baixo orçamento, precisa vender com clareza"}`,
+    "",
+    "Crie uma resposta prática em português do Brasil, pronta para copiar e usar.",
+    "Estruture com: objetivo, passo a passo, versão pronta, checklist de validação e próximo teste.",
+    "Evite promessas enganosas, claims impossíveis e qualquer orientação para burlar plataformas.",
+  ].join("\n");
+}
+
 function copyText(text: string) {
   if (!text) return;
   navigator.clipboard?.writeText(text);
@@ -255,9 +304,18 @@ function buildPixPayload({ key, name, city, amount, description }: {
 }
 
 export default function ToolsPage() {
-  const [tab, setTab] = useState<Tab>("keywords");
+  const [tab, setTab] = useState<Tab>("arsenal");
   const [seed, setSeed] = useState("curso de maquiagem\nemagrecer rapido\nrenda extra online");
   const [offer, setOffer] = useState("produto digital para meio de funil");
+  const [megaSearch, setMegaSearch] = useState("");
+  const [megaContext, setMegaContext] = useState("Quero vender um produto digital low ticket para iniciantes, com pouco orçamento, usando tráfego pago e conteúdo curto.");
+  const [megaOffer, setMegaOffer] = useState("Trackfy Lite por R$ 59/mês para quem quer UTMs, métricas e ferramentas de marketing digital");
+  const [megaChannel, setMegaChannel] = useState("TikTok, Reels, Meta Ads e WhatsApp");
+  const [megaProvider, setMegaProvider] = useState<"gemini" | "openai" | "anthropic">("gemini");
+  const [megaApiKey, setMegaApiKey] = useState("");
+  const [selectedMegaTool, setSelectedMegaTool] = useState<string>(MEGA_TOOLS[0]);
+  const [megaOutput, setMegaOutput] = useState("");
+  const [megaLoading, setMegaLoading] = useState(false);
   const [imageStatus, setImageStatus] = useState("");
   const [cleanImageUrl, setCleanImageUrl] = useState("");
   const [creativeFile, setCreativeFile] = useState<{ url: string; type: "image" | "video"; name: string } | null>(null);
@@ -323,6 +381,29 @@ export default function ToolsPage() {
   }, [seed, offer]);
 
   const pixPayload = useMemo(() => buildPixPayload(pix), [pix]);
+  const megaTools = useMemo(() => MEGA_TOOLS
+    .map((name, index) => ({ name, index, category: toolCategory(index) }))
+    .filter((item) => !megaSearch || normalizeText(`${item.name} ${item.category}`).includes(normalizeText(megaSearch))),
+  [megaSearch]);
+  const selectedMegaPrompt = useMemo(() => buildMegaPrompt(selectedMegaTool, megaContext, megaChannel, megaOffer), [selectedMegaTool, megaContext, megaChannel, megaOffer]);
+
+  const generateMegaTool = async () => {
+    setMegaLoading(true); setMegaOutput("");
+    try {
+      const response = await fetch("/api/ai-tools", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: megaProvider, apiKey: megaApiKey, prompt: selectedMegaPrompt }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível gerar.");
+      setMegaOutput(result.output || "");
+    } catch (error) {
+      setMegaOutput(error instanceof Error ? error.message : "Não foi possível gerar com IA.");
+    } finally {
+      setMegaLoading(false);
+    }
+  };
 
   const compliance = useMemo(() => {
     const text = normalizeText(landing);
@@ -687,6 +768,7 @@ export default function ToolsPage() {
   };
 
   const tabs = [
+    { id: "arsenal", label: "Arsenal 100", icon: PackageCheck },
     { id: "keywords", label: "Keywords", icon: KeyRound },
     { id: "prospector", label: "Prospector", icon: Radar },
     { id: "spy", label: "Spy", icon: FileSearch },
@@ -815,6 +897,109 @@ export default function ToolsPage() {
           </div>
         </div>
       </div>
+
+      {tab === "arsenal" && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-5">
+            <div className="card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <PackageCheck className="w-4 h-4" style={{ color: "var(--blue)" }} strokeWidth={2.5} />
+                <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Gerador IA multi-ferramentas</h2>
+              </div>
+              <div>
+                <label className="section-label mb-1.5 block" style={{ padding: 0 }}>Ferramenta selecionada</label>
+                <select value={selectedMegaTool} onChange={(e) => setSelectedMegaTool(e.target.value)} className="select">
+                  {MEGA_TOOLS.map((tool, index) => <option key={tool} value={tool}>{index + 1}. {toolCategory(index)} - {tool}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="section-label mb-1.5 block" style={{ padding: 0 }}>Oferta/produto</label>
+                <textarea value={megaOffer} onChange={(e) => setMegaOffer(e.target.value)} className="input min-h-[80px]" />
+              </div>
+              <div>
+                <label className="section-label mb-1.5 block" style={{ padding: 0 }}>Contexto do cliente/campanha</label>
+                <textarea value={megaContext} onChange={(e) => setMegaContext(e.target.value)} className="input min-h-[110px]" />
+              </div>
+              <div>
+                <label className="section-label mb-1.5 block" style={{ padding: 0 }}>Canal</label>
+                <input value={megaChannel} onChange={(e) => setMegaChannel(e.target.value)} className="input" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="section-label mb-1.5 block" style={{ padding: 0 }}>IA</label>
+                  <select value={megaProvider} onChange={(e) => setMegaProvider(e.target.value as typeof megaProvider)} className="select">
+                    <option value="gemini">Gemini</option>
+                    <option value="openai">ChatGPT/OpenAI</option>
+                    <option value="anthropic">Claude</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="section-label mb-1.5 block" style={{ padding: 0 }}>API privada opcional</label>
+                  <input value={megaApiKey} onChange={(e) => setMegaApiKey(e.target.value)} placeholder="Deixe vazio para usar servidor" className="input" type="password" />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={generateMegaTool} disabled={megaLoading} className="btn-primary px-4 py-2.5">
+                  <FlaskConical className="w-4 h-4" strokeWidth={2.5} />
+                  {megaLoading ? "Gerando..." : "Gerar com IA"}
+                </button>
+                <button onClick={() => copyText(selectedMegaPrompt)} className="btn-secondary px-4 py-2.5">
+                  <Copy className="w-4 h-4" strokeWidth={2.5} />
+                  Copiar prompt
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              <div className="card p-5">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Saída</h2>
+                  <button onClick={() => copyText(megaOutput || selectedMegaPrompt)} className="btn-secondary px-3 py-2">
+                    <Copy className="w-4 h-4" strokeWidth={2.5} />
+                    Copiar
+                  </button>
+                </div>
+                <textarea readOnly value={megaOutput || selectedMegaPrompt} className="input min-h-[360px] font-mono text-[12px]" />
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: "Ferramentas", value: MEGA_TOOLS.length },
+                  { label: "Categorias", value: 10 },
+                  { label: "Custo base", value: "Local" },
+                  { label: "IA", value: "Opcional" },
+                ].map((item) => (
+                  <div key={item.label} className="card p-4">
+                    <p className="text-[10px] font-bold uppercase" style={{ color: "var(--text-4)" }}>{item.label}</p>
+                    <p className="text-[22px] font-bold mt-1 tabular-nums" style={{ color: "var(--text-1)" }}>{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="card p-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Biblioteca de 100 ferramentas</h2>
+                <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Clique em qualquer card para carregar o prompt no gerador.</p>
+              </div>
+              <div className="relative w-full md:w-80">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-4)" }} strokeWidth={2.5} />
+                <input value={megaSearch} onChange={(e) => setMegaSearch(e.target.value)} placeholder="Buscar ferramenta..." className="input pl-9" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 max-h-[680px] overflow-auto pr-1">
+              {megaTools.map((tool) => (
+                <button key={tool.name} onClick={() => setSelectedMegaTool(tool.name)} className={cn("text-left rounded-lg border p-3 transition-all", selectedMegaTool === tool.name && "shadow-md")} style={{ borderColor: selectedMegaTool === tool.name ? "rgba(37,99,235,0.35)" : "var(--border)", background: selectedMegaTool === tool.name ? "var(--blue-light)" : "var(--surface)" }}>
+                  <p className="text-[10px] font-bold uppercase" style={{ color: "var(--text-4)" }}>{tool.index + 1} · {tool.category}</p>
+                  <p className="text-[12px] font-bold mt-1" style={{ color: "var(--text-1)" }}>{tool.name}</p>
+                  <p className="text-[11px] mt-1" style={{ color: "var(--text-4)" }}>{tool.category === "Vídeo IA" ? "Prompt/roteiro para IA de vídeo" : "Prompt pronto + checklist"}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {tab === "keywords" && (
         <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-5">
