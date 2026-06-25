@@ -733,6 +733,46 @@ export default function ToolsPage() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        {[
+          { label: "Pesquisa e demanda", value: `${keywordRows.length} ideias`, icon: Search, tone: "var(--blue)", text: "Keywords, spy e prospecção para achar onde tem intenção." },
+          { label: "Oferta e conversão", value: `${funnelCalc.finalRate.toFixed(1)}% funil`, icon: Workflow, tone: "var(--green)", text: "Oferta, copy, direct, funil e teste A/B para melhorar resposta." },
+          { label: "Operação comercial", value: `${zapOptinContacts.length} opt-ins`, icon: MessageCircle, tone: "#f97316", text: "WhatsApp, calendário, Pix e ROI para executar sem bagunça." },
+          { label: "Risco operacional", value: `${contingencyScore}% ok`, icon: ShieldCheck, tone: contingencyScore >= 70 ? "var(--green)" : "var(--yellow)", text: "Compliance e contingência para reduzir bloqueios e perda de dados." },
+        ].map((item) => (
+          <div key={item.label} className="card p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${item.tone}14` }}>
+                <item.icon className="w-4 h-4" style={{ color: item.tone }} strokeWidth={2.4} />
+              </div>
+              <span className="text-[12px] font-bold tabular-nums" style={{ color: item.tone }}>{item.value}</span>
+            </div>
+            <p className="text-[13px] font-bold mt-3" style={{ color: "var(--text-1)" }}>{item.label}</p>
+            <p className="text-[12px] mt-1 leading-relaxed" style={{ color: "var(--text-4)" }}>{item.text}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="card p-4 flex flex-col lg:flex-row lg:items-center gap-3">
+        <div className="flex-1">
+          <p className="text-[12px] font-bold uppercase" style={{ color: "var(--text-4)" }}>Ferramenta ativa</p>
+          <p className="text-[15px] font-bold mt-1" style={{ color: "var(--text-1)" }}>{tabs.find((item) => item.id === tab)?.label}</p>
+          <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>{TOOL_TUTORIALS[tab].tip}</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2 w-full lg:w-auto">
+          {[
+            { label: "Funil", value: `${funnelCalc.finalRate.toFixed(1)}%` },
+            { label: "ROI", value: roiCalc.roas.toFixed(2) },
+            { label: "A/B", value: `${abCalc.lift.toFixed(1)}%` },
+          ].map((item) => (
+            <div key={item.label} className="rounded-lg px-3 py-2 min-w-[90px]" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+              <p className="text-[10px] font-bold uppercase" style={{ color: "var(--text-4)" }}>{item.label}</p>
+              <p className="text-[17px] font-bold tabular-nums" style={{ color: "var(--text-1)" }}>{item.value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="flex flex-wrap gap-1 p-1.5 rounded-xl" style={{ background: "var(--bg-muted)" }}>
         {tabs.map((item) => (
           <button

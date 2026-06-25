@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { Activity, BarChart3, Check, Code2, Copy, Database, ExternalLink, Link2, MousePointerClick, Plus, RefreshCw, Search, Tag, Trash2, TrendingUp } from "lucide-react";
+import { Activity, AlertTriangle, BarChart3, Check, Code2, Copy, Database, ExternalLink, Link2, MousePointerClick, Plus, RefreshCw, Search, Tag, Trash2, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sourceLabel, type TrafficChannel } from "@/lib/tracking";
 
@@ -156,6 +156,8 @@ export default function UTMsPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [utmsSyncing, setUtmsSyncing] = useState(false);
   const [rangeDays, setRangeDays] = useState(7);
+  const [resetText, setResetText] = useState("");
+  const [resettingMetrics, setResettingMetrics] = useState(false);
 
   useEffect(() => {
     setUTMs(loadUTMs());
@@ -267,6 +269,23 @@ export default function UTMsPage() {
     try { await fetch(`/api/utms?id=${encodeURIComponent(id)}&siteId=${encodeURIComponent(tracker.siteId)}`, { method: "DELETE" }); } catch { /* cópia local permanece disponível */ }
   };
 
+  const handleResetMetrics = async () => {
+    if (!tracker.siteId || resetText.trim().toUpperCase() !== "RESETAR") return;
+    setResettingMetrics(true); setSummaryError("");
+    try {
+      const response = await fetch(`/api/tracking?siteId=${encodeURIComponent(tracker.siteId)}&confirm=${encodeURIComponent(tracker.siteId)}`, { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível resetar as métricas.");
+      setSummary(null);
+      setResetText("");
+      await loadSummary();
+    } catch (error) {
+      setSummaryError(error instanceof Error ? error.message : "Não foi possível resetar as métricas.");
+    } finally {
+      setResettingMetrics(false);
+    }
+  };
+
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopied(id);
@@ -304,6 +323,14 @@ export default function UTMsPage() {
   const sessionWord = (count: number) => count === 1 ? "sessão" : "sessões";
   const reachedText = (count: number) => count === 1 ? "chegou" : "chegaram";
   const openedText = (count: number) => count === 1 ? "abriu" : "abriram";
+  const maxChannelVisits = summary ? Math.max(1, ...summary.channels.map((channel) => channel.visits)) : 1;
+  const topCampaigns = summary?.campaigns.slice(0, 6) ?? [];
+  const maxCampaignVisits = Math.max(1, ...topCampaigns.map((campaign) => campaign.visits));
+  const precisionChecks = summary ? [
+    { label: "Direto não vira pago", ok: summary.campaigns.every((campaign) => !(campaign.source === "direct" && /cpc|paid|banner|facebook|google/i.test(`${campaign.medium} ${campaign.campaign}`))), detail: "Sessões sem UTM ficam em Direto." },
+    { label: "Pageview coerente", ok: pageViewCount >= summary.totals.visits, detail: `${pageViewCount} pageviews para ${summary.totals.visits} sessões.` },
+    { label: "Compra deduplicada", ok: summary.totals.purchases <= Math.max(summary.totals.checkouts, summary.totals.purchases), detail: "Compra usa ID do pedido quando enviado." },
+  ] : [];
 
   return (
     <div className="max-w-[1100px] mx-auto space-y-6">
@@ -857,6 +884,87 @@ export default function UTMsPage() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-4">
+                <div className="card p-5">
+                  <div className="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Origem do tráfego</h2>
+                      <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Sessões por canal. Direto sem UTM fica separado de tráfego pago.</p>
+                    </div>
+                    <BarChart3 className="w-5 h-5" style={{ color: "var(--blue)" }} strokeWidth={2.25} />
+                  </div>
+                  <div className="space-y-3">
+                    {summary.channels.map((channel) => {
+                      const width = Math.max(3, Math.round((channel.visits / maxChannelVisits) * 100));
+                      const color = channel.channel === "paid" ? "var(--blue)" : channel.channel === "organic" ? "var(--green)" : channel.channel === "direct" ? "var(--yellow)" : "var(--text-4)";
+                      return (
+                        <div key={channel.channel}>
+                          <div className="flex items-center justify-between gap-3 mb-1.5">
+                            <span className="text-[12px] font-bold" style={{ color: "var(--text-2)" }}>{sourceLabel(channel.channel)}</span>
+                            <span className="text-[12px] tabular-nums" style={{ color: "var(--text-4)" }}>{channel.visits} sessões · {channel.checkouts} checkout</span>
+                          </div>
+                          <div className="h-3 rounded-full overflow-hidden" style={{ background: "var(--bg-muted)" }}>
+                            <div className="h-full rounded-full transition-all" style={{ width: `${width}%`, background: color }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="card p-5">
+                  <div className="flex items-center justify-between gap-3 mb-5">
+                    <div>
+                      <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Precisão do tracking</h2>
+                      <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Checks automáticos para evitar leitura errada.</p>
+                    </div>
+                    <Check className="w-5 h-5" style={{ color: "var(--green)" }} strokeWidth={2.25} />
+                  </div>
+                  <div className="space-y-3">
+                    {precisionChecks.map((check) => (
+                      <div key={check.label} className="rounded-lg p-3 flex gap-3" style={{ background: check.ok ? "rgba(22,163,74,0.08)" : "var(--yellow-light)", border: `1px solid ${check.ok ? "rgba(22,163,74,0.16)" : "rgba(202,138,4,0.18)"}` }}>
+                        <span className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0" style={{ background: check.ok ? "var(--green)" : "var(--yellow)" }} />
+                        <div>
+                          <p className="text-[12px] font-bold" style={{ color: "var(--text-2)" }}>{check.label}</p>
+                          <p className="text-[11px] mt-1 leading-relaxed" style={{ color: "var(--text-4)" }}>{check.detail}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="card p-5">
+                <div className="flex items-center justify-between gap-3 mb-5">
+                  <div>
+                    <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Campanhas que chegaram no site</h2>
+                    <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Ranking visual das UTMs reais recebidas. Campanha salva mas sem visita não aparece aqui.</p>
+                  </div>
+                  <TrendingUp className="w-5 h-5" style={{ color: "var(--green)" }} strokeWidth={2.25} />
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {topCampaigns.length === 0 ? <p className="text-[13px]" style={{ color: "var(--text-4)" }}>Nenhuma campanha recebida ainda.</p> : topCampaigns.map((campaign) => {
+                    const width = Math.max(4, Math.round((campaign.visits / maxCampaignVisits) * 100));
+                    const checkoutRate = campaign.visits > 0 ? ((campaign.checkouts ?? 0) / campaign.visits) * 100 : 0;
+                    return (
+                      <div key={`${campaign.source}-${campaign.medium}-${campaign.campaign}`} className="rounded-lg p-4" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-bold truncate" style={{ color: "var(--text-1)" }}>{campaign.campaign}</p>
+                            <p className="text-[11px] mt-1" style={{ color: "var(--text-4)" }}>{campaign.source} / {campaign.medium}</p>
+                          </div>
+                          <span className="badge badge-blue">{campaign.visits}</span>
+                        </div>
+                        <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: "var(--bg-muted)" }}>
+                          <div className="h-full rounded-full" style={{ width: `${width}%`, background: "var(--blue)" }} />
+                        </div>
+                        <p className="text-[11px] mt-2" style={{ color: "var(--text-4)" }}>{campaign.checkouts ?? 0} checkout · {checkoutRate.toFixed(1)}% sessão &gt; checkout</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4">
                 <div className="card p-5">
                   <div className="flex items-center justify-between gap-3 mb-5">
@@ -1003,6 +1111,22 @@ export default function UTMsPage() {
                       <span className="text-[11px] shrink-0" style={{ color: "var(--text-4)" }}>{new Date(event.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+              <div className="card p-5 border" style={{ borderColor: "rgba(220,38,38,0.18)", background: "rgba(254,242,242,0.55)" }}>
+                <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(220,38,38,0.1)" }}>
+                    <AlertTriangle className="w-5 h-5" style={{ color: "var(--red)" }} strokeWidth={2.25} />
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Resetar métricas desta oferta</h2>
+                    <p className="text-[12px] mt-1 leading-relaxed" style={{ color: "var(--text-3)" }}>Apaga eventos, funil e pedidos rastreados deste site ID. Não apaga UTMs salvas, script instalado nem configurações da oferta. Digite RESETAR para liberar.</p>
+                  </div>
+                  <input value={resetText} onChange={(e) => setResetText(e.target.value)} placeholder="RESETAR" className="input w-full lg:w-36" />
+                  <button type="button" onClick={handleResetMetrics} disabled={resettingMetrics || resetText.trim().toUpperCase() !== "RESETAR"} className="btn-secondary px-4 py-2" style={{ color: resetText.trim().toUpperCase() === "RESETAR" ? "var(--red)" : undefined }}>
+                    <Trash2 className="w-4 h-4" strokeWidth={2.25} />
+                    {resettingMetrics ? "Resetando" : "Resetar"}
+                  </button>
                 </div>
               </div>
             </>

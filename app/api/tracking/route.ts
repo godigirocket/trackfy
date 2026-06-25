@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
@@ -179,6 +179,22 @@ export async function POST(request: NextRequest) {
 }
 
 export function OPTIONS() { return new NextResponse(null, { status: 204, headers: corsHeaders }); }
+
+export async function DELETE(request: NextRequest) {
+  const supabase = trackingClient();
+  if (!supabase) return json({ error: "Tracking backend ainda não configurado." }, { status: 503 });
+
+  const siteId = request.nextUrl.searchParams.get("siteId");
+  const confirm = request.nextUrl.searchParams.get("confirm");
+  if (!siteId || siteId.length > 120) return json({ error: "siteId obrigatório." }, { status: 400 });
+  if (confirm !== siteId) return json({ error: "Confirmação inválida." }, { status: 400 });
+
+  const orderResult = await supabase.from("trackfy_orders").delete().eq("site_id", siteId);
+  const eventResult = await supabase.from("trackfy_events").delete().eq("site_id", siteId);
+  if (orderResult.error || eventResult.error) return json({ error: "Não foi possível resetar as métricas." }, { status: 500 });
+
+  return json({ ok: true, siteId });
+}
 
 export async function GET(request: NextRequest) {
   const supabase = trackingClient();
