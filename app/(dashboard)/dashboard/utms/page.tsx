@@ -134,7 +134,7 @@ function buildNativeTrackingSnippet(endpoint: string, siteId: string, measuremen
 type TrackingSummary = {
   updatedAt: string;
   range?: { days: number; since: string };
-  totals: { visits: number; pageViews?: number; leads: number; checkouts: number; payments?: number; purchases: number; paidOrders?: number; revenue?: number; events?: number; attributedSessions?: number };
+  totals: { visits: number; visitors?: number; pageViews?: number; leads: number; checkouts: number; payments?: number; purchases: number; paidOrders?: number; revenue?: number; events?: number; attributedSessions?: number; attributedVisitors?: number };
   channels: Array<{ channel: TrafficChannel; visits: number; leads: number; checkouts: number; purchases: number; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
   pages: Array<{ path: string; url: string | null; visits: number; leads: number; checkouts: number; purchases: number; lastSeen: string }>;
   campaigns: Array<{ source: string; medium: string; campaign: string; visits: number; leads?: number; checkouts?: number; purchases?: number; lastSeen: string; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
@@ -293,12 +293,17 @@ export default function UTMsPage() {
     visitToPurchase: summary.totals.visits > 0 ? (summary.totals.purchases / summary.totals.visits) * 100 : 0,
   } : { visitToLead: 0, visitToCheckout: 0, checkoutToPurchase: 0, visitToPurchase: 0 };
   const pageViewCount = summary?.totals.pageViews ?? summary?.eventCounts?.page_view ?? 0;
+  const visitorCount = summary?.totals.visitors ?? summary?.totals.visits ?? 0;
   const attributedSessions = summary?.totals.attributedSessions ?? 0;
-  const attributionRate = summary && summary.totals.visits > 0 ? (attributedSessions / summary.totals.visits) * 100 : 0;
+  const attributedVisitors = summary?.totals.attributedVisitors ?? attributedSessions;
+  const attributionRate = visitorCount > 0 ? (attributedVisitors / visitorCount) * 100 : 0;
   const revenue = summary?.totals.revenue ?? 0;
   const paidOrders = summary?.totals.paidOrders ?? 0;
   const paymentCount = summary?.totals.payments ?? summary?.eventCounts?.add_payment_info ?? 0;
   const checkoutGap = summary ? Math.max(0, summary.totals.checkouts - summary.totals.purchases) : 0;
+  const sessionWord = (count: number) => count === 1 ? "sessão" : "sessões";
+  const reachedText = (count: number) => count === 1 ? "chegou" : "chegaram";
+  const openedText = (count: number) => count === 1 ? "abriu" : "abriram";
 
   return (
     <div className="max-w-[1100px] mx-auto space-y-6">
@@ -739,7 +744,7 @@ export default function UTMsPage() {
             </div>
             <div className="flex-1">
               <h2 className="text-[15px] font-bold" style={{ color: "var(--text-1)" }}>Dados do seu site no Trackfy</h2>
-              <p className="text-[13px] mt-1" style={{ color: "var(--text-4)" }}>Sessões únicas, funil consolidado e páginas separadas por visualização. Atualiza sozinho enquanto esta aba fica aberta.</p>
+              <p className="text-[13px] mt-1" style={{ color: "var(--text-4)" }}>Visitantes, sessões, funil consolidado e páginas separadas por visualização. Atualiza sozinho enquanto esta aba fica aberta.</p>
             </div>
             <select value={rangeDays} onChange={(e) => setRangeDays(Number(e.target.value))} className="select w-full md:w-36">
               <option value={1}>Hoje</option>
@@ -773,11 +778,12 @@ export default function UTMsPage() {
 
           {summary && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
                 {[
-                  { label: "Sessões únicas", value: summary.totals.visits, detail: "Pessoas/janelas únicas no período", tone: "var(--blue)" },
+                  { label: "Visitantes únicos", value: visitorCount, detail: "Mesmo navegador conta uma vez", tone: "var(--blue)" },
+                  { label: "Sessões", value: summary.totals.visits, detail: "Entradas/abas no período", tone: "var(--green)" },
                   { label: "Pageviews", value: pageViewCount, detail: "Todas as páginas abertas no funil", tone: "var(--green)" },
-                  { label: "Origem identificada", value: `${attributionRate.toFixed(0)}%`, detail: `${attributedSessions} sessões com UTM, busca ou referência`, tone: attributionRate >= 70 ? "var(--green)" : "var(--yellow)" },
+                  { label: "Origem identificada", value: `${attributionRate.toFixed(0)}%`, detail: `${attributedVisitors} visitantes com UTM, busca ou referência`, tone: attributionRate >= 70 ? "var(--green)" : "var(--yellow)" },
                   { label: "Faturamento confirmado", value: revenue > 0 ? revenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "R$ 0,00", detail: `${paidOrders} pedido${paidOrders === 1 ? "" : "s"} pago${paidOrders === 1 ? "" : "s"}`, tone: revenue > 0 ? "var(--green)" : "var(--text-2)" },
                 ].map((metric) => (
                   <div key={metric.label} className="card p-4">
@@ -811,13 +817,13 @@ export default function UTMsPage() {
                       {
                         title: summary.totals.checkouts > 0 ? "Checkout marcado" : "Checkout zerado",
                         status: summary.totals.checkouts > 0 ? "OK" : "Falta",
-                        text: summary.totals.checkouts > 0 ? `${summary.totals.checkouts} sessão${summary.totals.checkouts === 1 ? "" : "ões"} chegou${summary.totals.checkouts === 1 ? "" : "ram"} ao checkout.` : "Use data-trackfy-funnel=\"begin_checkout\" no botão certo.",
+                        text: summary.totals.checkouts > 0 ? `${summary.totals.checkouts} ${sessionWord(summary.totals.checkouts)} ${reachedText(summary.totals.checkouts)} ao checkout.` : "Use data-trackfy-funnel=\"begin_checkout\" no botão certo.",
                         color: summary.totals.checkouts > 0 ? "var(--green)" : "var(--yellow)",
                       },
                       {
                         title: summary.totals.purchases > 0 ? "Compra confirmada" : paymentCount > 0 ? "Pagamento aberto" : "Compra ainda não chegou",
                         status: summary.totals.purchases > 0 ? "OK" : checkoutGap > 0 ? "Atenção" : "Falta",
-                        text: summary.totals.purchases > 0 ? "O Trackfy já recebeu evento de compra aprovada." : paymentCount > 0 ? `${paymentCount} sessão${paymentCount === 1 ? "" : "ões"} abriu${paymentCount === 1 ? "" : "ram"} pagamento/Pix, mas ainda sem purchase.` : checkoutGap > 0 ? `${checkoutGap} checkout sem purchase. A compra precisa vir do obrigado/webhook.` : "Dispare trackfyPurchase apenas após pagamento aprovado.",
+                        text: summary.totals.purchases > 0 ? "O Trackfy já recebeu evento de compra aprovada." : paymentCount > 0 ? `${paymentCount} ${sessionWord(paymentCount)} ${openedText(paymentCount)} pagamento/Pix, mas ainda sem purchase.` : checkoutGap > 0 ? `${checkoutGap} checkout sem purchase. A compra precisa vir do obrigado/webhook.` : "Dispare trackfyPurchase apenas após pagamento aprovado.",
                         color: summary.totals.purchases > 0 ? "var(--green)" : checkoutGap > 0 ? "var(--yellow)" : "var(--text-4)",
                       },
                     ].map((item) => (
@@ -836,7 +842,8 @@ export default function UTMsPage() {
                   <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Leitura correta</h2>
                   <div className="space-y-3 mt-4">
                     {[
-                      ["Sessões", "quantas visitas únicas entraram."],
+                      ["Visitantes", "mesmo navegador contado uma vez."],
+                      ["Sessões", "entradas/abas diferentes no período."],
                       ["Pageviews", "quantas páginas foram abertas."],
                       ["Checkout", "sessões que clicaram/chegaram no pagamento."],
                       ["Compra", "só vale quando o pagamento foi confirmado."],

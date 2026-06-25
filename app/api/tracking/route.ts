@@ -100,13 +100,35 @@ function isInternalTest(row: TrackingRow) {
     || ["manual-cors-check", "pixel-endpoint-test", "reset_test"].includes(campaign);
 }
 
+function eventIdentity(row: TrackingRow) {
+  const parts = row.event_id?.split("|") ?? [];
+  if (parts.length >= 3 && parts[2] === row.event_name) {
+    return { visitor: parts[0], session: parts[1] };
+  }
+  if (parts.length >= 2 && parts[1] === row.event_name) {
+    return { visitor: parts[0], session: parts[0] };
+  }
+  const fallback = row.event_id || `${row.source}|${row.medium}|${row.campaign}|${row.created_at.slice(0, 16)}`;
+  return { visitor: fallback, session: fallback };
+}
+
 function sessionKey(row: TrackingRow) {
-  if (row.event_id?.includes("|")) return row.event_id.split("|")[0];
+  const identity = eventIdentity(row);
+  if (identity.session) return identity.session;
   return row.event_id || `${row.source}|${row.medium}|${row.campaign}|${row.created_at.slice(0, 16)}`;
+}
+
+function visitorKey(row: TrackingRow) {
+  const identity = eventIdentity(row);
+  return identity.visitor || sessionKey(row);
 }
 
 function uniqueSessionCount(rows: TrackingRow[]) {
   return new Set(rows.filter((row) => row.event_name === "page_view").map(sessionKey)).size;
+}
+
+function uniqueVisitorCount(rows: TrackingRow[]) {
+  return new Set(rows.filter((row) => row.event_name === "page_view").map(visitorKey)).size;
 }
 
 function uniqueEventSessionCount(rows: TrackingRow[], eventName: string) {
@@ -189,6 +211,7 @@ export async function GET(request: NextRequest) {
   const rows = uniqueRows(((data ?? []) as TrackingRow[]).filter((row) => !isInternalTest(row)));
   const pageViews = rows.filter((row) => row.event_name === "page_view").length;
   const attributedSessions = uniqueSessionCount(rows.filter((row) => row.channel !== "direct" && row.channel !== "unknown"));
+  const attributedVisitors = uniqueVisitorCount(rows.filter((row) => row.channel !== "direct" && row.channel !== "unknown"));
   const eventCounts = ["page_view", "view_item", "generate_lead", "begin_checkout", "add_payment_info", "purchase"].reduce<Record<string, number>>((counts, eventName) => {
     counts[eventName] = eventName === "purchase"
       ? uniquePurchaseCount(rows)
@@ -247,6 +270,7 @@ export async function GET(request: NextRequest) {
     range: { days, since },
     totals: {
       visits: uniqueSessionCount(rows),
+      visitors: uniqueVisitorCount(rows),
       pageViews,
       leads: uniqueEventSessionCount(rows, "generate_lead"),
       checkouts: uniqueEventSessionCount(rows, "begin_checkout"),
@@ -254,6 +278,7 @@ export async function GET(request: NextRequest) {
       purchases: uniquePurchaseCount(rows),
       events: rows.length,
       attributedSessions,
+      attributedVisitors,
       paidOrders: orders.filter((order) => order.status === "paid").length,
       refundedOrders: orders.filter((order) => order.status === "refunded").length,
       revenue: orders.filter((order) => order.status === "paid").reduce((sum, order) => sum + Number(order.value), 0),
