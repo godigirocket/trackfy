@@ -1,13 +1,17 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
+  // Evitar timeout no build de páginas com localStorage
+  experimental: {
+    workerThreads: false,
+    cpus: 1,
   },
-  typescript: {
-    ignoreBuildErrors: true,
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "**.fbcdn.net" },
+      { protocol: "https", hostname: "**.facebook.com" },
+      { protocol: "https", hostname: "images.unsplash.com" },
+    ],
   },
-  // Desativa a exportação estática problemática para caminhos que estão quebrando
-  output: 'standalone',
 };
 
 module.exports = nextConfig;

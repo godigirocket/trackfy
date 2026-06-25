@@ -2,8 +2,8 @@
   "framework": "nextjs",
   "crons": [
     {
-      "path": "/api/rules/execute",
-      "schedule": "0 0 * * *"
+      "path": "/api/cron/supabase-recovery",
+      "schedule": "0 12 * * *"
     }
   ]
 }

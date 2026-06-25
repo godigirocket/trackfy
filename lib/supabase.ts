@@ -1,73 +1,39 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-let _client: SupabaseClient | null = null;
-let _notConfiguredLogged = false; // log only once
-
-function getClient(): SupabaseClient | null {
-  if (_client) return _client;
-  if (!supabaseUrl || !supabaseAnonKey) {
-    if (!_notConfiguredLogged) {
-      console.info("[Supabase] Not configured. Lead sync disabled.");
-      _notConfiguredLogged = true;
-    }
-    return null;
-  }
-  _client = createClient(supabaseUrl, supabaseAnonKey);
-  return _client;
-}
-
-export const supabase = { get client() { return getClient(); } };
+import { createClient } from "@supabase/supabase-js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./constants";
 
 /**
- * Fetches leads from Supabase CRM table.
- * Adapts column names to internal CRMLead format.
+ * Cliente Supabase resiliente.
+ *
+ * Se o projeto Supabase estiver pausado, deletado ou sem rede, qualquer
+ * chamada (auth.signIn, auth.getSession, etc.) iria falhar com
+ * "Failed to fetch" e quebrar o redirect do dashboard. Para evitar isso
+ * usamos um wrapper de fetch com timeout e flag offline para que o app
+ * apenas redirecione ao /login em vez de travar a UI.
  */
-export const fetchSupabaseLeads = async () => {
-  const client = getClient();
-  if (!client) return [];
+const TIMEOUT_MS = 8000;
 
-  try {
-    // Try 'leads' table first, fallback to 'crm_leads'
-    let { data, error } = await client
-      .from("leads")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(5000);
-
-    if (error) {
-      const alt = await client.from("crm_leads").select("*").order("created_at", { ascending: false }).limit(5000);
-      if (alt.error) {
-        console.error("[Supabase] Error fetching leads:", error.message, alt.error.message);
-        return [];
-      }
-      data = alt.data;
-    }
-
-    if (!data) return [];
-
-    return data.map((row: any) => ({
-      lead_id: row.id?.toString() || row.lead_id?.toString() || Math.random().toString(36).slice(2),
-      campaign_id: row.campaign_id || row.utm_campaign || row.campanha || "",
-      status: mapLeadStatus(row.status || row.situacao || row.etapa || "new"),
-      sale_value: parseFloat(row.sale_value || row.valor_venda || row.valor || row.value || "0"),
-      date: row.created_at || row.date || row.data || new Date().toISOString(),
-      product: row.product || row.produto || row.plano || row.operadora || "",
-      name: row.name || row.nome || "",
-      phone: row.phone || row.telefone || row.whatsapp || "",
-    }));
-  } catch (err) {
-    console.error("[Supabase] Unexpected error:", err);
-    return [];
-  }
+const safeFetch: typeof fetch = (input, init) => {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  return fetch(input as RequestInfo, { ...(init ?? {}), signal: ctrl.signal })
+    .finally(() => clearTimeout(t));
 };
 
-function mapLeadStatus(raw: string): "new" | "contacted" | "converted" | "lost" {
-  const s = raw.toLowerCase().trim();
-  if (["convertido", "converted", "venda", "vendido", "ganho", "won", "fechado"].includes(s)) return "converted";
-  if (["contatado", "contacted", "em andamento", "negociando", "followup", "follow-up"].includes(s)) return "contacted";
-  if (["perdido", "lost", "cancelado", "desistiu", "sem resposta"].includes(s)) return "lost";
-  return "new";
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+  global: { fetch: safeFetch },
+});
+
+/** Helper que nunca rejeita — retorna { data: null } em caso de erro de rede. */
+export async function safeGetSession() {
+  try {
+    const { data } = await supabase.auth.getSession();
+    return data;
+  } catch {
+    return { session: null };
+  }
 }

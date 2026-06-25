@@ -1,47 +1,77 @@
-"use client";
-
-import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { HelpCircle, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MetricCardProps {
-  title: string;
+  label: string;
   value: string;
-  variation: string;
-  isPositive: boolean;
-  prefix?: string;
+  tooltip: string;
+  delta?: number;
+  highlight?: "green" | "red" | "blue" | "yellow";
+  loading?: boolean;
 }
 
-export function MetricCard({ title, value, variation, isPositive, prefix }: MetricCardProps) {
+export function MetricCard({ label, value, tooltip, delta, highlight, loading }: MetricCardProps) {
+  const valueStyle: Record<string, string> = {
+    green:  "var(--green)",
+    red:    "var(--red)",
+    blue:   "var(--blue)",
+    yellow: "var(--yellow)",
+  };
+
   return (
-    <Card className="border-border bg-card enterprise-shadow overflow-hidden transition-all hover:border-primary/30">
-      <CardContent className="p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="metric-title">{title}</p>
-          <div className={cn(
-            "flex items-center gap-1 text-[11px] font-black uppercase tracking-tight px-2 py-0.5 rounded-lg",
-            isPositive ? "text-emerald-500 bg-emerald-500/10" : "text-rose-500 bg-rose-500/10"
-          )}>
-            {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-            {variation}
+    <div
+      className="card p-5 flex flex-col gap-3 group relative"
+      style={{ cursor: "default" }}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <span className="stat-label">{label}</span>
+        <div className="relative">
+          <HelpCircle
+            className="w-3.5 h-3.5 cursor-help transition-colors"
+            style={{ color: "var(--text-4)" }}
+            strokeWidth={2}
+          />
+          {/* Tooltip */}
+          <div
+            className="absolute right-0 top-5 z-50 w-52 p-3 text-[12px] leading-relaxed opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150"
+            style={{
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--r-lg)",
+              boxShadow: "var(--shadow-xl)",
+              color: "var(--text-3)",
+            }}
+          >
+            {tooltip}
           </div>
         </div>
-        
-        <div className="flex items-baseline gap-1">
-          {prefix && <span className="text-xl font-black text-muted-foreground/50 tracking-tighter">{prefix}</span>}
-          <h2 className="metric-value text-foreground">{value}</h2>
-        </div>
+      </div>
 
-        <div className="h-1.5 w-full bg-muted/50 rounded-full overflow-hidden">
-          <div 
-            className={cn(
-              "h-full rounded-full transition-all duration-1000",
-              isPositive ? "bg-emerald-500" : "bg-rose-500"
-            )} 
-            style={{ width: "65%" }} 
-          />
+      {/* Value */}
+      {loading ? (
+        <div
+          className="h-7 w-24 rounded-lg animate-pulse"
+          style={{ background: "var(--bg-muted)" }}
+        />
+      ) : (
+        <p
+          className="stat-value"
+          style={highlight ? { color: valueStyle[highlight] } : {}}
+        >
+          {value}
+        </p>
+      )}
+
+      {/* Delta */}
+      {delta !== undefined && !loading && (
+        <div className={cn("stat-delta", delta >= 0 ? "up" : "down")}>
+          {delta >= 0
+            ? <TrendingUp className="w-3 h-3" strokeWidth={2.5} />
+            : <TrendingDown className="w-3 h-3" strokeWidth={2.5} />}
+          {delta >= 0 ? "+" : ""}{delta.toFixed(1)}%
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }

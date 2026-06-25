@@ -1,43 +1,27 @@
-export interface TrackingEvent {
-  id: string;
-  timestamp: string;
-  url: string;
-  referrer: string;
-  utm_source?: string;
-  utm_campaign?: string;
-  fbclid?: string;
-  gclid?: string;
-  session_id: string;
-  device: string;
-  location: string;
-  type: 'paid' | 'organic';
+export type TrafficChannel = "paid" | "organic" | "referral" | "direct" | "unknown";
+
+const SEARCH_ENGINES = ["google.", "bing.", "yahoo.", "duckduckgo.", "search.brave.", "ecosia."];
+const SOCIAL_NETWORKS = ["facebook.", "instagram.", "tiktok.", "linkedin.", "youtube.", "pinterest.", "x.com", "twitter."];
+
+export function classifyTraffic(input: { source?: string | null; medium?: string | null; referrer?: string | null }) {
+  const source = (input.source ?? "").toLowerCase();
+  const medium = (input.medium ?? "").toLowerCase();
+  const referrer = (input.referrer ?? "").toLowerCase();
+  const value = `${source} ${medium} ${referrer}`;
+
+  if (/(cpc|ppc|paid|paid_social|display|banner|affiliate)/.test(value)) return "paid" as const;
+  if (medium === "organic" || SEARCH_ENGINES.some((domain) => referrer.includes(domain))) return "organic" as const;
+  if (referrer || SOCIAL_NETWORKS.some((domain) => value.includes(domain))) return "referral" as const;
+  if (source === "direct" || (!source && !referrer)) return "direct" as const;
+  return "unknown" as const;
 }
 
-// In-memory store for demo (would be a DB in production)
-let events: TrackingEvent[] = [];
-
-export function addEvent(data: any) {
-  const isPaid = !!(data.src || data.cam || data.fb || data.gclid || data.url.includes('utm_'));
-  
-  const event: TrackingEvent = {
-    id: Math.random().toString(36).slice(2),
-    timestamp: new Date().toISOString(),
-    url: data.url,
-    referrer: data.ref,
-    utm_source: data.src,
-    utm_campaign: data.cam,
-    fbclid: data.fb,
-    gclid: data.gclid,
-    session_id: data.sid,
-    device: data.device || 'Desktop', // simplified
-    location: data.location || 'Brasil', // simplified
-    type: isPaid ? 'paid' : 'organic'
-  };
-  
-  events.push(event);
-  return event;
-}
-
-export function getEvents() {
-  return events;
+export function sourceLabel(channel: TrafficChannel) {
+  return {
+    paid: "Pago",
+    organic: "Orgânico",
+    referral: "Referência",
+    direct: "Direto",
+    unknown: "Sem classificação",
+  }[channel];
 }

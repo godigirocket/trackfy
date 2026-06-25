@@ -1,64 +1,86 @@
 "use client";
+import { Bell, CheckCheck, Info, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { useState } from "react";
+import { useNotificationStore } from "@/store/useNotificationStore";
+import { cn } from "@/lib/utils";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { Bell, Clock, Zap, AlertCircle } from "lucide-react";
-import Link from "next/link";
-
-const NOTIFICATIONS = [
-  { id: 1, title: "Token Expirando", msg: "Reconecte sua conta Meta Ads em 24h.", icon: AlertCircle, color: "text-amber-500", time: "1h" },
-  { id: 2, title: "Regra Executada", msg: "Campanha 'Escala' foi pausada.", icon: Zap, color: "text-primary", time: "3h" },
-];
+const icons  = { info: Info, success: CheckCircle, warning: AlertTriangle, error: XCircle };
+const colors = { info: "#3b82f6", success: "#22c55e", warning: "#f59e0b", error: "#f87171" };
 
 export function NotificationBell() {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger className="relative flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground">
-        <Bell className="w-5 h-5 text-muted-foreground" />
-        <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full border-2 border-card" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-80 border-border bg-card p-2" align="end">
-        <DropdownMenuLabel className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground p-3">
-          Notificações Recentes
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <div className="max-h-[300px] overflow-y-auto">
-          {NOTIFICATIONS.map(n => (
-            <DropdownMenuItem key={n.id} className="p-3 focus:bg-muted/50 rounded-xl cursor-pointer">
-              <div className="flex gap-3">
-                <div className="mt-0.5">
-                  <n.icon className={cn("w-4 h-4", n.color)} />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[11px] font-black tracking-tight">{n.title}</p>
-                  <p className="text-[10px] text-muted-foreground font-medium leading-tight">{n.msg}</p>
-                  <div className="flex items-center gap-1 text-[8px] font-bold text-muted-foreground/60 uppercase">
-                    <Clock className="w-2.5 h-2.5" />
-                    há {n.time}
-                  </div>
-                </div>
-              </div>
-            </DropdownMenuItem>
-          ))}
-        </div>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className="p-0">
-          <Link href="/notifications" className="w-full text-center py-2.5 text-[10px] font-black text-primary uppercase tracking-widest hover:underline">
-            Ver todas as notificações
-          </Link>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
+  const [open, setOpen] = useState(false);
+  const { notifications, unreadCount, markRead, markAllRead } = useNotificationStore();
 
-function cn(...classes: any[]) {
-  return classes.filter(Boolean).join(" ");
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="btn-icon relative"
+      >
+        <Bell className="w-[15px] h-[15px]" strokeWidth={2.5} />
+        {unreadCount > 0 && (
+          <span
+            className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full text-white flex items-center justify-center font-bold"
+            style={{ background: "var(--red)", fontSize: 9 }}
+          >
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            className="absolute right-0 top-10 z-50 w-80 overflow-hidden"
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--r-xl)",
+              boxShadow: "var(--shadow-xl)",
+            }}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+              <h3 className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>Notificações</h3>
+              {unreadCount > 0 && (
+                <button onClick={markAllRead}
+                  className="text-[12px] font-semibold flex items-center gap-1 transition-colors"
+                  style={{ color: "var(--blue)" }}>
+                  <CheckCheck className="w-3.5 h-3.5" strokeWidth={2.5} /> Marcar todas
+                </button>
+              )}
+            </div>
+            <div className="max-h-80 overflow-y-auto divide-y" style={{ borderColor: "var(--border)" }}>
+              {notifications.length === 0 ? (
+                <p className="text-[13px] font-medium text-center py-8" style={{ color: "var(--text-4)" }}>Nenhuma notificação</p>
+              ) : (
+                notifications.map((n) => {
+                  const Icon = icons[n.type];
+                  return (
+                    <div key={n.id} onClick={() => markRead(n.id)}
+                      className="flex gap-3 px-4 py-3 cursor-pointer transition-colors duration-100"
+                      style={{ background: !n.read ? "var(--blue-light)" : "transparent" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-subtle)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = !n.read ? "var(--blue-light)" : "transparent")}>
+                      <Icon className="w-4 h-4 mt-0.5 shrink-0" style={{ color: colors[n.type] }} strokeWidth={2.5} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px]" style={{ color: "var(--text-1)", fontWeight: !n.read ? 700 : 500 }}>{n.title}</p>
+                        <p className="text-[11px] mt-0.5" style={{ color: "var(--text-3)" }}>{n.message}</p>
+                        <p className="text-[10px] mt-1" style={{ color: "var(--text-4)" }}>
+                          {formatDistanceToNow(n.createdAt, { addSuffix: true, locale: ptBR })}
+                        </p>
+                      </div>
+                      {!n.read && <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: "var(--blue)" }} />}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }

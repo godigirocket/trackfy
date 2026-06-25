@@ -1,259 +1,194 @@
 "use client";
-
 import { useState } from "react";
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from "@/components/ui/table";
-import { 
-  ChevronDown, ChevronRight, Play, Pause, MoreHorizontal, 
-  Copy, Edit2, Search, Filter, Download, Plus, Settings, RefreshCw
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
+import { ChevronRight, ChevronDown, Power, Pencil, Copy, Trash2, Search, Plus, MoreHorizontal, FlaskConical } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { fmtCurrency, fmtPct, fmtCompact } from "@/lib/utils";
+import type { MetricRow, CampaignStatus } from "@/store/useAppStore";
+import { useAppStore } from "@/store/useAppStore";
+import { updateCampaignStatus } from "@/lib/meta/api";
+import { safeArray } from "@/lib/safeArray";
 
-interface Campaign {
-  id: string;
-  name: string;
-  status: boolean;
-  budget: string;
-  vendas: number;
-  cpa: string;
-  gastos: string;
-  ic: number;
-  lucro: string;
-  cpi: string;
-  color?: string;
+const STATUS_LABEL: Record<CampaignStatus, string> = {
+  ACTIVE: "Ativa", PAUSED: "Pausada", ARCHIVED: "Arquivada", DELETED: "Excluída",
+};
+
+function StatusBadge({ status }: { status: CampaignStatus }) {
+  const styles: Record<CampaignStatus, { bg: string; color: string }> = {
+    ACTIVE:   { bg: "var(--green-light)",  color: "var(--green)" },
+    PAUSED:   { bg: "var(--bg-muted)",     color: "var(--text-3)" },
+    ARCHIVED: { bg: "var(--bg-muted)",     color: "var(--text-4)" },
+    DELETED:  { bg: "var(--red-light)",    color: "var(--red)" },
+  };
+  const s = styles[status];
+  return (
+    <span className="badge" style={{ background: s.bg, color: s.color }}>
+      {status === "ACTIVE" && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--green)" }} />}
+      {STATUS_LABEL[status]}
+    </span>
+  );
 }
 
-const MOCK_DATA: Campaign[] = [
-  {
-    id: "c1",
-    name: "CP14 - CBO - 1-5-1 - AD6 #14",
-    status: true,
-    budget: "R$ 800,00",
-    vendas: 7,
-    cpa: "R$ 49,82",
-    gastos: "R$ 348,74",
-    ic: 22,
-    lucro: "R$ 602,28",
-    cpi: "R$ 15,85",
-    color: "bg-purple-500"
-  },
-  {
-    id: "c2",
-    name: "CP24 - CBO - 1-1-4 - VSL2",
-    status: true,
-    budget: "R$ 300,00",
-    vendas: 2,
-    cpa: "R$ 52,06",
-    gastos: "R$ 104,11",
-    ic: 12,
-    lucro: "R$ 167,61",
-    cpi: "R$ 8,67",
-  },
-  {
-    id: "c3",
-    name: "CP60 - CBO - 1-5-1 - AD6 #49 - Cópia",
-    status: false,
-    budget: "R$ 300,00",
-    vendas: 2,
-    cpa: "R$ 53,57",
-    gastos: "R$ 107,14",
-    ic: 10,
-    lucro: "R$ 118,03",
-    cpi: "R$ 10,71",
-    color: "bg-green-500"
-  },
-  {
-    id: "c4",
-    name: "CP58 - CBO - 1-5-1 - AD6 #46",
-    status: false,
-    budget: "R$ 300,00",
-    vendas: 1,
-    cpa: "R$ 79,32",
-    gastos: "R$ 79,32",
-    ic: 4,
-    lucro: "R$ 56,54",
-    cpi: "R$ 19,83",
-    color: "bg-blue-500"
+function EditableCell({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(value);
+  if (editing) {
+    return (
+      <input autoFocus value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={() => { setEditing(false); onSave(val); }}
+        onKeyDown={(e) => { if (e.key === "Enter") { setEditing(false); onSave(val); } if (e.key === "Escape") setEditing(false); }}
+        className="input text-[13px] py-1 w-full" />
+    );
   }
-];
+  return (
+    <span onDoubleClick={() => setEditing(true)}
+      className="cursor-pointer transition-colors duration-100 font-medium"
+      style={{ color: "var(--text-1)" }}
+      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--blue)")}
+      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-1)")}
+      title="Duplo clique para editar">
+      {value}
+    </span>
+  );
+}
 
-export function CampaignsTable() {
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+function TableRow({ row, children = [], depth = 0 }: { row: MetricRow; children?: MetricRow[]; depth?: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const { token, setCampaigns, campaigns } = useAppStore();
+
+  const toggleStatus = async () => {
+    const next = row.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
+    if (token) { try { await updateCampaignStatus(row.id, next, token); } catch { } }
+    setCampaigns(campaigns.map((c) => c.id === row.id ? { ...c, status: next } : c));
+  };
 
   return (
-    <div className="space-y-0 border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden">
-      {/* Upper Toolbar (White) */}
-      <div className="flex items-center justify-between p-4 bg-white">
+    <>
+      <tr className="border-b group transition-colors duration-100"
+        style={{ borderColor: "var(--border)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-subtle)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+        <td className="px-4 py-3 min-w-[220px]">
+          <div className="flex items-center gap-2" style={{ paddingLeft: depth * 18 }}>
+            {children.length > 0 ? (
+              <button onClick={() => setExpanded(!expanded)}
+                className="btn-icon w-5 h-5 shrink-0">
+                {expanded ? <ChevronDown className="w-3.5 h-3.5" strokeWidth={2.5} /> : <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.5} />}
+              </button>
+            ) : <span className="w-5" />}
+            {row.thumbnailUrl && <img src={row.thumbnailUrl} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />}
+            <EditableCell value={row.name} onSave={(v) => setCampaigns(campaigns.map((c) => c.id === row.id ? { ...c, name: v } : c))} />
+          </div>
+        </td>
+        <td className="px-4 py-3 whitespace-nowrap"><StatusBadge status={row.status} /></td>
+        <td className="px-4 py-3 text-right text-[13px] font-bold tabular-nums" style={{ color: "var(--text-1)" }}>{fmtCompact(row.conversions)}</td>
+        <td className="px-4 py-3 text-right text-[13px] tabular-nums" style={{ color: "var(--text-2)" }}>{fmtCurrency(row.cpl)}</td>
+        <td className="px-4 py-3 text-right text-[13px] tabular-nums" style={{ color: "var(--text-2)" }}>{fmtCurrency(row.budget)}</td>
+        <td className="px-4 py-3 text-right text-[13px] tabular-nums" style={{ color: "var(--text-2)" }}>{fmtCurrency(row.spend)}</td>
+        <td className="px-4 py-3 text-right text-[13px] tabular-nums" style={{ color: "var(--text-2)" }}>{fmtPct(row.ctr)}</td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <button onClick={toggleStatus} className="btn-icon w-7 h-7"
+              style={{ color: row.status === "ACTIVE" ? "var(--green)" : "var(--text-4)" }}>
+              <Power className="w-3.5 h-3.5" strokeWidth={2.5} />
+            </button>
+            <button className="btn-icon w-7 h-7"><Pencil className="w-3.5 h-3.5" strokeWidth={2} /></button>
+            <button className="btn-icon w-7 h-7"><Copy className="w-3.5 h-3.5" strokeWidth={2} /></button>
+            <button className="btn-icon w-7 h-7"
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-4)")}>
+              <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
+            </button>
+          </div>
+        </td>
+      </tr>
+      {expanded && children.map((child) => <TableRow key={child.id} row={child} depth={depth + 1} />)}
+    </>
+  );
+}
+
+export function CampaignsTable({ campaigns, adsets, ads }: { campaigns: MetricRow[]; adsets: MetricRow[]; ads: MetricRow[] }) {
+  const [search, setSearch]             = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | CampaignStatus>("ALL");
+
+  const filtered = safeArray(campaigns).filter((c) => {
+    return c.name.toLowerCase().includes(search.toLowerCase()) && (statusFilter === "ALL" || c.status === statusFilter);
+  });
+
+  const getAdsets = (id: string) => safeArray(adsets).filter((a) => a.parentId === id);
+
+  const HEADERS = ["Nome", "Status", "Conversões", "CPL", "Orçamento", "Gasto", "CTR", "Ações"];
+  const RIGHT   = ["Conversões", "CPL", "Orçamento", "Gasto", "CTR"];
+
+  return (
+    <div className="card overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b flex-wrap" style={{ borderColor: "var(--border)" }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button className="btn-primary px-3.5 py-2">
+            <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> Criar
+          </button>
+          {[{ icon: Copy, label: "Duplicar" }, { icon: Pencil, label: "Editar" }, { icon: FlaskConical, label: "Teste A/B" }].map(({ icon: Icon, label }) => (
+            <button key={label} className="btn-secondary px-3.5 py-2">
+              <Icon className="w-3.5 h-3.5" strokeWidth={2} /> {label}
+            </button>
+          ))}
+          <button className="btn-ghost px-2.5 py-2">
+            <MoreHorizontal className="w-4 h-4" strokeWidth={2.5} />
+          </button>
+        </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" className="h-10 w-10 p-0 rounded-lg border border-gray-100">
-             <Settings className="w-5 h-5 text-gray-400" />
-          </Button>
-          <Button variant="ghost" className="h-10 gap-2 border border-gray-100 text-xs font-bold text-gray-600 px-4">
-             <Edit2 className="w-4 h-4" /> Abrir no gerenciador
-          </Button>
-          <Button variant="ghost" className="h-10 gap-2 border border-gray-100 text-xs font-bold text-gray-600 px-4">
-             <Copy className="w-4 h-4" /> Duplicar campanhas
-          </Button>
-          <Select>
-            <SelectTrigger className="w-10 h-10 p-0 border border-gray-100 justify-center">
-               <ChevronDown className="w-4 h-4 text-gray-400" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Ações</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-4">
-           <span className="text-xs font-medium text-gray-400">Atualizado há 2 minutos</span>
-           <Button className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 h-10">
-              Atualizar
-           </Button>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: "var(--text-4)" }} strokeWidth={2.5} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar campanha..."
+              className="input pl-8 py-1.5 text-[12px] w-44" />
+          </div>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="select py-1.5 text-[12px] w-28">
+            <option value="ALL">Todos</option>
+            <option value="ACTIVE">Ativas</option>
+            <option value="PAUSED">Pausadas</option>
+          </select>
         </div>
       </div>
 
-      {/* Tabs Toolbar (Light Gray) */}
-      <div className="flex items-center justify-between border-y border-gray-100 px-2 py-0">
-        <div className="flex items-center">
-          <button className="flex items-center gap-2 px-6 py-4 border-b-2 border-blue-600 text-blue-600 font-bold text-sm">
-             <Plus className="w-4 h-4" /> Campanhas
-             <span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full ml-1">2 selecionados</span>
-          </button>
-          <button className="flex items-center gap-2 px-6 py-4 text-gray-400 font-bold text-sm hover:text-gray-600">
-             <MoreHorizontal className="w-4 h-4" /> Conjuntos para 2 campanhas
-          </button>
-          <button className="flex items-center gap-2 px-6 py-4 text-gray-400 font-bold text-sm hover:text-gray-600">
-             <MoreHorizontal className="w-4 h-4" /> Anúncios para 2 campanhas
-          </button>
-        </div>
-      </div>
-
-      {/* Filters Area (Gray) */}
-      <div className="p-4 bg-gray-50/50 grid grid-cols-1 md:grid-cols-5 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Nome da Campanha</label>
-            <Input placeholder="Filtrar por nome" className="h-10 bg-white border-gray-200 text-xs" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Status da Campanha</label>
-            <Select defaultValue="any">
-              <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
-                <SelectValue placeholder="Qualquer" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Qualquer</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Data de cadastro</label>
-            <Select defaultValue="today">
-              <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
-                <SelectValue placeholder="Hoje" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Hoje</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Conta de Anúncio</label>
-            <Select defaultValue="c2">
-              <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
-                <SelectValue placeholder="CONTA 02" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="c2">CONTA 02</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-400 uppercase">Produto</label>
-            <Select defaultValue="any">
-              <SelectTrigger className="bg-white border-gray-200 text-xs font-semibold">
-                <SelectValue placeholder="Qualquer" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Qualquer</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-      </div>
-
-      {/* Table Area */}
+      {/* Table */}
       <div className="overflow-x-auto">
-        <Table>
-          <TableHeader className="bg-gray-50/50">
-            <TableRow className="hover:bg-transparent border-gray-200">
-              <TableHead className="w-[50px] text-center"><Checkbox /></TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Status</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Campanha</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Orçamento</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-center">Vendas</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-right">CPA</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-right">Gastos</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-center">IC</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-right">Lucro</TableHead>
-              <TableHead className="text-[10px] font-black uppercase text-gray-400 tracking-wider text-right">CPI</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {MOCK_DATA.map((campaign) => (
-              <TableRow key={campaign.id} className="border-gray-100 hover:bg-gray-50 transition-colors">
-                <TableCell className="text-center"><Checkbox checked={campaign.id === 'c1' || campaign.id === 'c3'} /></TableCell>
-                <TableCell>
-                  <Switch checked={campaign.status} />
-                </TableCell>
-                <TableCell>
-                   <div className="flex items-center gap-3">
-                      {campaign.color && <div className={`w-3 h-3 rounded-full ${campaign.color}`} />}
-                      <span className="text-sm font-bold text-gray-600">{campaign.name}</span>
-                   </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500">
-                     <Edit2 className="w-3 h-3 text-gray-300" />
-                     <div className="flex flex-col leading-tight">
-                        <span>{campaign.budget}</span>
-                        <span className="text-[9px] text-gray-300 font-medium">Diário</span>
-                     </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-center font-bold text-gray-600">{campaign.vendas}</TableCell>
-                <TableCell className="text-right font-bold text-gray-600">{campaign.cpa}</TableCell>
-                <TableCell className="text-right font-bold text-gray-600">{campaign.gastos}</TableCell>
-                <TableCell className="text-center font-bold text-gray-600">{campaign.ic}</TableCell>
-                <TableCell className="text-right font-bold text-green-600">{campaign.lucro}</TableCell>
-                <TableCell className="text-right font-bold text-gray-400">{campaign.cpi}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-          <tfoot className="bg-gray-50/50">
-             <TableRow className="border-none font-black text-gray-700">
-                <TableCell className="text-[10px] font-black uppercase text-gray-400">N/A</TableCell>
-                <TableCell className="text-[10px] font-black uppercase text-gray-400">N/A</TableCell>
-                <TableCell className="text-xs font-black uppercase">17 Campanhas</TableCell>
-                <TableCell className="text-xs font-black uppercase">N/A</TableCell>
-                <TableCell className="text-center text-xs font-black">15</TableCell>
-                <TableCell className="text-right text-xs font-black">R$ 110,94</TableCell>
-                <TableCell className="text-right text-xs font-black">R$ 1.664,14</TableCell>
-                <TableCell className="text-center text-xs font-black">139</TableCell>
-                <TableCell className="text-right text-xs font-black text-green-600">R$ 327,21</TableCell>
-                <TableCell className="text-right text-xs font-black">R$ 11,50</TableCell>
-             </TableRow>
-          </tfoot>
-        </Table>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b" style={{ background: "var(--bg-subtle)", borderColor: "var(--border)" }}>
+              {HEADERS.map((h) => (
+                <th key={h}
+                  className={cn("px-4 py-3 whitespace-nowrap", RIGHT.includes(h) ? "text-right" : "text-left")}
+                  style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-4)" }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-14 text-center text-[13px] font-medium" style={{ color: "var(--text-4)" }}>
+                  {campaigns.length === 0
+                    ? "Configure o Token Meta e Account ID em Configurações para carregar campanhas."
+                    : "Nenhuma campanha encontrada."}
+                </td>
+              </tr>
+            ) : (
+              filtered.map((c) => <TableRow key={c.id} row={c} children={getAdsets(c.id)} />)
+            )}
+          </tbody>
+        </table>
       </div>
+
+      {filtered.length > 0 && (
+        <div className="px-4 py-2.5 border-t" style={{ borderColor: "var(--border)" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-4)" }}>
+            {filtered.length} campanha{filtered.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

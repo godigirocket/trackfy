@@ -1,0 +1,849 @@
+"use client";
+import { useState, useEffect, useMemo } from "react";
+import { Activity, BarChart3, Check, Code2, Copy, Database, ExternalLink, Link2, MousePointerClick, Plus, RefreshCw, Search, Tag, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { sourceLabel, type TrafficChannel } from "@/lib/tracking";
+
+interface UTMEntry {
+  id: string;
+  url: string;
+  source: string;
+  medium: string;
+  campaign: string;
+  term?: string;
+  content?: string;
+  full: string;
+  createdAt: string;
+  clicks?: number;
+  siteId?: string;
+}
+
+const STORAGE_KEY = "tf_utms";
+const TRACKER_KEY = "tf_native_tracker";
+const TRACKING_SITES_KEY = "tf_tracking_sites";
+
+type TrackingSite = {
+  id: string;
+  name: string;
+  websiteUrl: string;
+  measurementId: string;
+  metaPixelId: string;
+  siteId: string;
+  endpoint: string;
+  installed: boolean;
+};
+
+function loadUTMs(): UTMEntry[] {
+  if (typeof window === "undefined") return [];
+  try { return dedupeUTMs(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]")); } catch { return []; }
+}
+function saveUTMs(utms: UTMEntry[]) { localStorage.setItem(STORAGE_KEY, JSON.stringify(dedupeUTMs(utms))); }
+
+function dedupeUTMs(utms: UTMEntry[]) {
+  const seen = new Set<string>();
+  return utms.filter((utm) => {
+    const key = `${utm.siteId || "legacy"}|${utm.full || utm.url}|${utm.source}|${utm.medium}|${utm.campaign}|${utm.term || ""}|${utm.content || ""}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildURL(base: string, params: Record<string, string>): string {
+  try {
+    const url = new URL(base.startsWith("http") ? base : `https://${base}`);
+    Object.entries(params).forEach(([k, v]) => { if (v) url.searchParams.set(k, v); });
+    return url.toString();
+  } catch { return ""; }
+}
+
+const SOURCE_PRESETS = ["facebook", "instagram", "google", "tiktok", "email", "whatsapp", "youtube", "organic"];
+const MEDIUM_PRESETS = ["cpc", "social", "email", "video", "banner", "referral", "organic"];
+
+function buildTrackingSnippet(measurementId: string) {
+  const id = measurementId.trim();
+  if (!/^G-[A-Z0-9]+$/i.test(id)) return "";
+  return `<!-- Trackfy: cole antes de </head> -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=${id}"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', '${id}', { send_page_view: true });
+
+  (function () {
+    var params = new URLSearchParams(window.location.search);
+    var attribution = {
+      source: params.get('utm_source') || document.referrer || 'direct',
+      medium: params.get('utm_medium') || (document.referrer ? 'referral' : 'direct'),
+      campaign: params.get('utm_campaign') || '(not set)',
+      term: params.get('utm_term') || '',
+      content: params.get('utm_content') || ''
+    };
+    localStorage.setItem('trackfy_attribution', JSON.stringify(attribution));
+    gtag('event', 'trackfy_landing', attribution);
+
+    window.trackfyFunnelEvent = function (eventName, extra) {
+      var stored = JSON.parse(localStorage.getItem('trackfy_attribution') || '{}');
+      gtag('event', eventName, Object.assign({
+        source: stored.source || 'direct',
+        medium: stored.medium || 'direct',
+        campaign: stored.campaign || '(not set)',
+        page_path: window.location.pathname
+      }, extra || {}));
+    };
+
+    // Chame somente depois de confirmação real de pagamento/webhook.
+    window.trackfyPurchase = function (order) {
+      if (!order || !order.transaction_id) return;
+      window.trackfyFunnelEvent('purchase', {
+        transaction_id: order.transaction_id,
+        value: Number(order.value || 0),
+        currency: order.currency || 'BRL',
+        items: order.items || []
+      });
+    };
+
+    document.addEventListener('click', function (event) {
+      var target = event.target.closest('a, button, [data-trackfy-click]');
+      if (!target) return;
+      var stored = JSON.parse(localStorage.getItem('trackfy_attribution') || '{}');
+      var funnelEvent = target.getAttribute('data-trackfy-funnel') || 'trackfy_click';
+      gtag('event', funnelEvent, {
+        source: stored.source || 'direct',
+        medium: stored.medium || 'direct',
+        campaign: stored.campaign || '(not set)',
+        link_url: target.href || '',
+        link_text: (target.innerText || target.getAttribute('aria-label') || 'click').trim().slice(0, 100),
+        page_path: window.location.pathname
+      });
+    }, true);
+  })();
+</script>`;
+}
+
+function buildNativeTrackingSnippet(endpoint: string, siteId: string, measurementId: string, metaPixelId: string) {
+  if (!endpoint || !siteId) return "";
+  const url = new URL(`${endpoint.replace(/\/$/, "")}/api/tracking/script`);
+  url.searchParams.set("siteId", siteId);
+  if (/^\d{8,20}$/.test(metaPixelId.trim())) url.searchParams.set("pixel", metaPixelId.trim());
+  if (/^G-[A-Z0-9]+$/i.test(measurementId.trim())) url.searchParams.set("ga", measurementId.trim());
+  return `<!-- Trackfy: cole uma vez antes de </head> -->\n<script defer src="${url.toString()}"></script>`;
+}
+
+type TrackingSummary = {
+  updatedAt: string;
+  totals: { visits: number; leads: number; checkouts: number; purchases: number };
+  channels: Array<{ channel: TrafficChannel; visits: number; leads: number; checkouts: number; purchases: number }>;
+  pages: Array<{ path: string; url: string | null; visits: number; leads: number; checkouts: number; purchases: number; lastSeen: string }>;
+  campaigns: Array<{ source: string; medium: string; campaign: string; visits: number; lastSeen: string }>;
+  recentEvents: Array<{ event: string; page: string; source: string; campaign: string; createdAt: string }>;
+  eventCounts: Record<string, number>;
+};
+
+export default function UTMsPage() {
+  const [utms, setUTMs]   = useState<UTMEntry[]>([]);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [form, setForm]   = useState({ url: "", source: "", medium: "", campaign: "", term: "", content: "" });
+  const [activeTab, setActiveTab] = useState<"create" | "list" | "tracking" | "data">("create");
+  const [tracker, setTracker] = useState<TrackingSite>({ id: "", name: "", websiteUrl: "", measurementId: "", metaPixelId: "", siteId: "", endpoint: "", installed: false });
+  const [sites, setSites] = useState<TrackingSite[]>([]);
+  const [sitesReady, setSitesReady] = useState(false);
+  const [summary, setSummary] = useState<TrackingSummary | null>(null);
+  const [summaryError, setSummaryError] = useState("");
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [utmsSyncing, setUtmsSyncing] = useState(false);
+
+  useEffect(() => {
+    setUTMs(loadUTMs());
+    const fallbackEndpoint = window.location.origin;
+    try {
+      const savedSites = JSON.parse(localStorage.getItem(TRACKING_SITES_KEY) ?? "[]") as TrackingSite[];
+      const active = JSON.parse(localStorage.getItem(TRACKER_KEY) ?? "{}");
+      const legacySite: TrackingSite = { id: crypto.randomUUID(), name: active.name || "Oferta principal", websiteUrl: "", measurementId: "", metaPixelId: "", siteId: crypto.randomUUID(), endpoint: fallbackEndpoint, installed: false, ...active };
+      const nextSites = savedSites.length ? savedSites : [legacySite];
+      const selected = nextSites.find((site) => site.id === active.id) ?? nextSites[0];
+      setSites(nextSites); setTracker(selected); setSitesReady(true);
+    } catch {
+      const first: TrackingSite = { id: crypto.randomUUID(), name: "Oferta principal", websiteUrl: "", measurementId: "", metaPixelId: "", siteId: crypto.randomUUID(), endpoint: fallbackEndpoint, installed: false };
+      setSites([first]); setTracker(first); setSitesReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!tracker.siteId) return;
+    let cancelled = false;
+    const syncUTMs = async () => {
+      setUtmsSyncing(true);
+      try {
+        const response = await fetch(`/api/utms?siteId=${encodeURIComponent(tracker.siteId)}`, { cache: "no-store" });
+        const result = await response.json();
+        if (cancelled) return;
+        const remote = Array.isArray(result.utms) ? dedupeUTMs(result.utms as UTMEntry[]) : [];
+        if (remote.length) { setUTMs(remote); saveUTMs(remote); return; }
+        const local = loadUTMs().filter((item) => !item.siteId || item.siteId === tracker.siteId);
+        setUTMs(dedupeUTMs(local));
+        await Promise.all(local.map((item) => fetch("/api/utms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...item, siteId: tracker.siteId }) })));
+      } catch { if (!cancelled) setUTMs(loadUTMs().filter((item) => !item.siteId || item.siteId === tracker.siteId)); }
+      finally { if (!cancelled) setUtmsSyncing(false); }
+    };
+    syncUTMs();
+    return () => { cancelled = true; };
+  }, [tracker.siteId]);
+  useEffect(() => {
+    if (!sitesReady || !tracker.siteId) return;
+    localStorage.setItem(TRACKER_KEY, JSON.stringify(tracker));
+    setSites((current) => {
+      const next = current.map((site) => site.id === tracker.id ? tracker : site);
+      localStorage.setItem(TRACKING_SITES_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [tracker, sitesReady]);
+
+  const selectSite = (id: string) => {
+    const site = sites.find((item) => item.id === id);
+    if (site) { setTracker(site); setSummary(null); setSummaryError(""); }
+  };
+  const createSite = () => {
+    const site: TrackingSite = { id: crypto.randomUUID(), name: `Nova oferta ${sites.length + 1}`, websiteUrl: "", measurementId: "", metaPixelId: "", siteId: crypto.randomUUID(), endpoint: window.location.origin, installed: false };
+    setSites((items) => [...items, site]); setTracker(site); setActiveTab("tracking"); setSummary(null);
+  };
+
+  const preview = buildURL(form.url, {
+    utm_source: form.source, utm_medium: form.medium, utm_campaign: form.campaign,
+    utm_term: form.term, utm_content: form.content,
+  });
+  const trackingSnippet = useMemo(() => buildTrackingSnippet(tracker.measurementId), [tracker.measurementId]);
+  const nativeTrackingSnippet = useMemo(() => buildNativeTrackingSnippet(tracker.endpoint, tracker.siteId, tracker.measurementId, tracker.metaPixelId), [tracker.endpoint, tracker.siteId, tracker.measurementId, tracker.metaPixelId]);
+
+  const loadSummary = async () => {
+    if (!tracker.siteId) return;
+    setSummaryLoading(true); setSummaryError("");
+    try {
+      const response = await fetch(`/api/tracking?siteId=${encodeURIComponent(tracker.siteId)}`, { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível carregar os dados.");
+      setSummary(result);
+    } catch (error) { setSummaryError(error instanceof Error ? error.message : "Não foi possível carregar os dados."); }
+    finally { setSummaryLoading(false); }
+  };
+
+  useEffect(() => {
+    if (activeTab !== "data" || !tracker.siteId) return;
+    loadSummary();
+    const timer = window.setInterval(loadSummary, 15000);
+    return () => window.clearInterval(timer);
+  // Atualiza o painel enquanto a aba está aberta, sem exigir GA4.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, tracker.siteId]);
+
+  const handleSave = async () => {
+    if (!form.url || !form.source || !form.medium || !form.campaign) return;
+    const duplicate = utms.find((utm) => utm.siteId === tracker.siteId && utm.full === preview);
+    if (duplicate) {
+      setActiveTab("list");
+      setCopied(duplicate.id);
+      setTimeout(() => setCopied(null), 2000);
+      return;
+    }
+    const entry: UTMEntry = {
+      id: crypto.randomUUID(), ...form, full: preview,
+      createdAt: new Date().toLocaleDateString("pt-BR"),
+      clicks: 0, siteId: tracker.siteId,
+    };
+    const updated = dedupeUTMs([entry, ...utms]);
+    setUTMs(updated); saveUTMs(updated);
+    try { await fetch("/api/utms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entry) }); } catch { /* cópia local permanece disponível */ }
+    setForm({ url: "", source: "", medium: "", campaign: "", term: "", content: "" });
+    setActiveTab("list");
+  };
+
+  const handleDelete = async (id: string) => {
+    const updated = utms.filter((u) => u.id !== id);
+    setUTMs(updated); saveUTMs(updated);
+    try { await fetch(`/api/utms?id=${encodeURIComponent(id)}&siteId=${encodeURIComponent(tracker.siteId)}`, { method: "DELETE" }); } catch { /* cópia local permanece disponível */ }
+  };
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const filtered = utms.filter((u) =>
+    u.campaign.toLowerCase().includes(search.toLowerCase()) ||
+    u.source.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const isFormValid = form.url && form.source && form.medium && form.campaign;
+
+  return (
+    <div className="max-w-[1100px] mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-[20px] font-bold tracking-tight" style={{ color: "var(--text-1)" }}>Gerador de UTMs</h1>
+          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-4)" }}>
+            Crie e gerencie parâmetros UTM para rastrear suas campanhas
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="badge badge-blue">{utms.length} UTMs salvos</span>
+          {utmsSyncing && <span className="text-[11px]" style={{ color: "var(--text-4)" }}>Sincronizando...</span>}
+        </div>
+      </div>
+
+      <div className="card p-4 flex flex-col md:flex-row md:items-end gap-3">
+        <div className="flex-1">
+          <label className="section-label mb-1.5 block" style={{ padding: 0 }}>Oferta/site para estas UTMs</label>
+          <select value={tracker.id} onChange={(e) => selectSite(e.target.value)} className="select">
+            {sites.map((site) => <option key={site.id} value={site.id}>{site.name || "Oferta sem nome"}{site.websiteUrl ? ` — ${site.websiteUrl}` : ""}</option>)}
+          </select>
+        </div>
+        <button type="button" onClick={() => setActiveTab("tracking")} className="btn-secondary px-4 py-2">Gerenciar ofertas</button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        {[
+          { step: "1", title: "Instale o Trackfy", text: "Cole um único script no seu site. GA4 é opcional, não é onde você precisa trabalhar." },
+          { step: "2", title: "Crie a UTM", text: "Nesta página, gere uma URL para cada campanha e criativo." },
+          { step: "3", title: "Cole no anúncio", text: "Use a URL final com UTM no Meta, TikTok, e-mail ou WhatsApp." },
+          { step: "4", title: "Veja os dados", text: "Abra Dados no Trackfy para ver visitas, leads, checkout e compras por origem." },
+        ].map((item) => (
+          <div key={item.step} className="card p-4 flex gap-3">
+            <span className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[12px] font-bold" style={{ background: "var(--blue-muted)", color: "var(--blue)" }}>{item.step}</span>
+            <div>
+              <p className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>{item.title}</p>
+              <p className="text-[12px] mt-1 leading-relaxed" style={{ color: "var(--text-4)" }}>{item.text}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: "var(--bg-muted)" }}>
+        {[
+          { id: "create", label: "Criar UTM" },
+          { id: "list", label: `Salvos (${utms.length})` },
+          { id: "tracking", label: "Instalar rastreamento" },
+          { id: "data", label: "Dados no Trackfy" },
+        ].map((t) => (
+          <button key={t.id} onClick={() => setActiveTab(t.id as any)}
+            className="px-4 py-2 rounded-lg text-[13px] font-semibold transition-all duration-150"
+            style={{
+              background: activeTab === t.id ? "var(--surface)" : "transparent",
+              color: activeTab === t.id ? "var(--text-1)" : "var(--text-4)",
+              boxShadow: activeTab === t.id ? "var(--shadow-sm)" : "none",
+            }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "create" && (
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+          {/* Form */}
+          <div className="lg:col-span-3 card p-6 space-y-5">
+            <h2 className="text-[15px] font-bold" style={{ color: "var(--text-1)" }}>Parâmetros UTM</h2>
+
+            {/* URL */}
+            <div>
+              <label className="block mb-1.5" style={{ fontSize: 12, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                URL de Destino *
+              </label>
+              <div className="relative">
+                <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-4)" }} strokeWidth={2} />
+                <input value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+                  placeholder="https://seusite.com/pagina"
+                  className="input pl-9" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Source */}
+              <div>
+                <label className="block mb-1.5" style={{ fontSize: 12, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Source *
+                </label>
+                <input value={form.source} onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))}
+                  placeholder="facebook, google..." className="input mb-2" />
+                <div className="flex flex-wrap gap-1">
+                  {SOURCE_PRESETS.map((p) => (
+                    <button key={p} onClick={() => setForm((f) => ({ ...f, source: p }))}
+                      className="px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all duration-100"
+                      style={{
+                        background: form.source === p ? "var(--blue-muted)" : "var(--bg-muted)",
+                        color: form.source === p ? "var(--blue)" : "var(--text-4)",
+                        border: `1px solid ${form.source === p ? "rgba(37,99,235,0.3)" : "var(--border)"}`,
+                      }}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Medium */}
+              <div>
+                <label className="block mb-1.5" style={{ fontSize: 12, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Medium *
+                </label>
+                <input value={form.medium} onChange={(e) => setForm((f) => ({ ...f, medium: e.target.value }))}
+                  placeholder="cpc, social..." className="input mb-2" />
+                <div className="flex flex-wrap gap-1">
+                  {MEDIUM_PRESETS.map((p) => (
+                    <button key={p} onClick={() => setForm((f) => ({ ...f, medium: p }))}
+                      className="px-2 py-0.5 rounded-md text-[11px] font-semibold transition-all duration-100"
+                      style={{
+                        background: form.medium === p ? "var(--blue-muted)" : "var(--bg-muted)",
+                        color: form.medium === p ? "var(--blue)" : "var(--text-4)",
+                        border: `1px solid ${form.medium === p ? "rgba(37,99,235,0.3)" : "var(--border)"}`,
+                      }}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Campaign */}
+            <div>
+              <label className="block mb-1.5" style={{ fontSize: 12, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Campaign *
+              </label>
+              <input value={form.campaign} onChange={(e) => setForm((f) => ({ ...f, campaign: e.target.value }))}
+                placeholder="nome-da-campanha" className="input" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block mb-1.5" style={{ fontSize: 12, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Term <span style={{ color: "var(--text-4)", fontWeight: 400 }}>(opcional)</span>
+                </label>
+                <input value={form.term} onChange={(e) => setForm((f) => ({ ...f, term: e.target.value }))}
+                  placeholder="palavra-chave" className="input" />
+              </div>
+              <div>
+                <label className="block mb-1.5" style={{ fontSize: 12, fontWeight: 600, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Content <span style={{ color: "var(--text-4)", fontWeight: 400 }}>(opcional)</span>
+                </label>
+                <input value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+                  placeholder="variacao-criativo" className="input" />
+              </div>
+            </div>
+
+            <button onClick={handleSave} disabled={!isFormValid}
+              className="btn-primary w-full py-2.5 text-[14px]">
+              <Plus className="w-4 h-4" strokeWidth={2.5} /> Salvar UTM
+            </button>
+          </div>
+
+          {/* Preview */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="card p-5">
+              <h3 className="text-[13px] font-bold mb-3" style={{ color: "var(--text-1)" }}>Preview da URL</h3>
+              {preview ? (
+                <>
+                  <div className="p-3 rounded-xl font-mono text-[11px] leading-relaxed break-all"
+                    style={{ background: "var(--bg-muted)", color: "var(--text-2)", border: "1px solid var(--border)" }}>
+                    {/* Highlight parts */}
+                    {(() => {
+                      const [base, query] = preview.split("?");
+                      return (
+                        <>
+                          <span style={{ color: "var(--text-1)", fontWeight: 600 }}>{base}</span>
+                          {query && (
+                            <>
+                              <span style={{ color: "var(--text-4)" }}>?</span>
+                              {query.split("&").map((param, i) => {
+                                const [k, v] = param.split("=");
+                                return (
+                                  <span key={i}>
+                                    {i > 0 && <span style={{ color: "var(--text-4)" }}>&</span>}
+                                    <span style={{ color: "var(--blue)" }}>{k}</span>
+                                    <span style={{ color: "var(--text-4)" }}>=</span>
+                                    <span style={{ color: "var(--green)" }}>{decodeURIComponent(v ?? "")}</span>
+                                  </span>
+                                );
+                              })}
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                  <button onClick={() => handleCopy(preview, "preview")}
+                    className="btn-secondary w-full mt-3 py-2">
+                    {copied === "preview"
+                      ? <><Check className="w-3.5 h-3.5 text-green-500" strokeWidth={2.5} /> Copiado!</>
+                      : <><Copy className="w-3.5 h-3.5" strokeWidth={2} /> Copiar URL</>}
+                  </button>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
+                  <Link2 className="w-8 h-8" style={{ color: "var(--border-2)" }} strokeWidth={1.5} />
+                  <p style={{ fontSize: 13, color: "var(--text-4)" }}>Preencha os campos para ver a URL</p>
+                </div>
+              )}
+            </div>
+
+            {/* Params summary */}
+            {(form.source || form.medium || form.campaign) && (
+              <div className="card p-4 space-y-2">
+                <h3 className="text-[12px] font-bold mb-2" style={{ color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Parâmetros</h3>
+                {[
+                  { key: "utm_source",   value: form.source,   color: "var(--blue)" },
+                  { key: "utm_medium",   value: form.medium,   color: "var(--green)" },
+                  { key: "utm_campaign", value: form.campaign, color: "#8b5cf6" },
+                  { key: "utm_term",     value: form.term,     color: "var(--yellow)" },
+                  { key: "utm_content",  value: form.content,  color: "#ec4899" },
+                ].filter((p) => p.value).map((p) => (
+                  <div key={p.key} className="flex items-center justify-between">
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-4)", fontFamily: "monospace" }}>{p.key}</span>
+                    <span className="badge" style={{ background: `${p.color}15`, color: p.color, fontFamily: "monospace" }}>{p.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "list" && (
+        <div className="space-y-4">
+          {/* Search */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-4)" }} strokeWidth={2.5} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por campanha ou source..."
+                className="input pl-9" />
+            </div>
+            <span style={{ fontSize: 13, color: "var(--text-4)" }}>{filtered.length} resultado{filtered.length !== 1 ? "s" : ""}</span>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="card p-16 text-center">
+              <Tag className="w-10 h-10 mx-auto mb-3" style={{ color: "var(--border-2)" }} strokeWidth={1.5} />
+              <p style={{ fontSize: 14, fontWeight: 600, color: "var(--text-3)" }}>
+                {utms.length === 0 ? "Nenhum UTM salvo ainda" : "Nenhum resultado encontrado"}
+              </p>
+              <p style={{ fontSize: 13, color: "var(--text-4)", marginTop: 4 }}>
+                {utms.length === 0 ? "Crie seu primeiro UTM na aba 'Criar UTM'" : "Tente outro termo de busca"}
+              </p>
+              {utms.length === 0 && (
+                <button onClick={() => setActiveTab("create")} className="btn-primary mt-4 px-5 py-2">
+                  <Plus className="w-4 h-4" strokeWidth={2.5} /> Criar UTM
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filtered.map((u) => (
+                <div key={u.id} className="card p-4 hover:shadow-md transition-all duration-150">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)" }}>{u.campaign}</span>
+                        <span className="badge badge-blue">{u.source}</span>
+                        <span className="badge badge-neutral">{u.medium}</span>
+                        {u.term && <span className="badge" style={{ background: "var(--yellow-light)", color: "var(--yellow)" }}>{u.term}</span>}
+                        {u.content && <span className="badge" style={{ background: "#fdf4ff", color: "#9333ea" }}>{u.content}</span>}
+                      </div>
+                      <p className="font-mono text-[11px] truncate" style={{ color: "var(--text-4)" }}>{u.full}</p>
+                      <p style={{ fontSize: 11, color: "var(--text-4)", marginTop: 4 }}>Criado em {u.createdAt}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => handleCopy(u.full, u.id)}
+                        className="btn-icon w-8 h-8" title="Copiar URL">
+                        {copied === u.id
+                          ? <Check className="w-3.5 h-3.5 text-green-500" strokeWidth={2.5} />
+                          : <Copy className="w-3.5 h-3.5" strokeWidth={2} />}
+                      </button>
+                      <a href={u.full} target="_blank" rel="noopener noreferrer"
+                        className="btn-icon w-8 h-8" title="Abrir URL">
+                        <ExternalLink className="w-3.5 h-3.5" strokeWidth={2} />
+                      </a>
+                      <button onClick={() => handleDelete(u.id)}
+                        className="btn-icon w-8 h-8" title="Excluir"
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-4)")}>
+                        <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "tracking" && (
+        <div className="space-y-5">
+          <div className="rounded-xl border p-5 flex flex-col lg:flex-row lg:items-center gap-4" style={{ borderColor: "rgba(37,99,235,0.2)", background: "var(--blue-light)" }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "var(--surface)" }}>
+              <Activity className="w-5 h-5" style={{ color: "var(--blue)" }} strokeWidth={2.5} />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-[15px] font-bold" style={{ color: "var(--text-1)" }}>Rastreie origens e cliques do seu site</h2>
+              <p className="text-[13px] mt-1 leading-relaxed" style={{ color: "var(--text-3)" }}>
+                Um único script envia os eventos para o Trackfy. Ele identifica UTMs, origem, visitas orgânicas, referências, acessos diretos e etapas reais do funil.
+              </p>
+            </div>
+            <span className="badge badge-blue">Trackfy nativo</span>
+          </div>
+
+          <div className="card p-4 flex flex-col md:flex-row md:items-end gap-3">
+            <div className="flex-1">
+              <label className="section-label mb-1.5 block" style={{ padding: 0 }}>Oferta/site em edição</label>
+              <select value={tracker.id} onChange={(e) => selectSite(e.target.value)} className="select">
+                {sites.map((site) => <option key={site.id} value={site.id}>{site.name || "Oferta sem nome"}{site.websiteUrl ? ` — ${site.websiteUrl}` : ""}</option>)}
+              </select>
+            </div>
+            <button type="button" onClick={createSite} className="btn-secondary px-4 py-2"><Plus className="w-4 h-4" />Nova oferta/site</button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[390px_1fr] gap-5">
+            <div className="card p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" style={{ color: "var(--blue)" }} strokeWidth={2.5} />
+                <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Configuração</h2>
+              </div>
+              <div>
+                <label className="section-label mb-1.5 block" style={{ padding: 0 }}>Nome da oferta/site</label>
+                <input value={tracker.name} onChange={(e) => setTracker((t) => ({ ...t, name: e.target.value }))} placeholder="Ex.: 10Pila Copa" className="input" />
+              </div>
+              <div>
+                <label className="section-label mb-1.5 block" style={{ padding: 0 }}>URL do seu site</label>
+                <input value={tracker.websiteUrl} onChange={(e) => setTracker((t) => ({ ...t, websiteUrl: e.target.value }))} placeholder="https://seusite.com" className="input" />
+              </div>
+              <div>
+                <label className="section-label mb-1.5 block" style={{ padding: 0 }}>ID de medição GA4</label>
+                <input value={tracker.measurementId} onChange={(e) => setTracker((t) => ({ ...t, measurementId: e.target.value.toUpperCase() }))} placeholder="G-XXXXXXXXXX" className="input font-mono" />
+                <p className="text-[12px] mt-1.5" style={{ color: "var(--text-4)" }}>Opcional. Preencha apenas se quiser uma cópia dos dados no Google Analytics. O Trackfy funciona sem entrar no GA4.</p>
+              </div>
+              <div>
+                <label className="section-label mb-1.5 block" style={{ padding: 0 }}>ID do Pixel da Meta</label>
+                <input value={tracker.metaPixelId} onChange={(e) => setTracker((t) => ({ ...t, metaPixelId: e.target.value.replace(/\D/g, "") }))} placeholder="Ex.: 123456789012345" className="input font-mono" inputMode="numeric" />
+                <p className="text-[12px] mt-1.5" style={{ color: "var(--text-4)" }}>Opcional. Informe o número que aparece dentro de <code>fbq('init', '...')</code>. Ao copiar o script Trackfy atualizado, não cole também o código-base do Pixel para não duplicar PageView.</p>
+              </div>
+              <div>
+                <label className="section-label mb-1.5 block" style={{ padding: 0 }}>Endereço do Trackfy</label>
+                <input value={tracker.endpoint} onChange={(e) => setTracker((t) => ({ ...t, endpoint: e.target.value.replace(/\/$/, "") }))} placeholder="https://tf.digirocket.site" className="input font-mono" />
+                <p className="text-[12px] mt-1.5" style={{ color: "var(--text-4)" }}>Deixe o endereço do seu painel Trackfy. Não coloque a URL da sua landing page aqui.</p>
+              </div>
+              <div className="rounded-lg p-3" style={{ background: "var(--bg-muted)" }}>
+                <p className="text-[12px] font-bold" style={{ color: "var(--text-2)" }}>O que aparece no Trackfy</p>
+                <div className="mt-2 space-y-1.5 text-[12px]" style={{ color: "var(--text-3)" }}>
+                  <p>Fonte e campanha UTM, página de entrada e referência</p>
+                  <p>Pago, orgânico, referência e direto classificados automaticamente</p>
+                  <p>Visitas, leads, checkout e compras deduplicadas por ID do pedido</p>
+                  {tracker.metaPixelId && <p>Meta Pixel: PageView, ViewContent, Lead, InitiateCheckout e Purchase</p>}
+                </div>
+              </div>
+              <div className="rounded-lg p-3" style={{ background: "var(--blue-light)" }}>
+                <p className="text-[12px] font-bold" style={{ color: "var(--blue)" }}>Separação garantida</p>
+                <p className="text-[12px] mt-1 leading-relaxed" style={{ color: "var(--text-3)" }}>Este site possui um ID Trackfy próprio. Use um Pixel Meta diferente para cada oferta quando quiser relatórios Meta separados. Nunca copie o script desta oferta para outro domínio.</p>
+              </div>
+            </div>
+
+            <div className="card p-5 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Code2 className="w-4 h-4" style={{ color: "var(--green)" }} strokeWidth={2.5} />
+                  <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Script único para instalar no site</h2>
+                </div>
+                <button onClick={() => handleCopy(nativeTrackingSnippet, "tracking-script")} disabled={!nativeTrackingSnippet} className="btn-secondary px-3 py-2">
+                  {copied === "tracking-script" ? <Check className="w-4 h-4 text-green-500" strokeWidth={2.5} /> : <Copy className="w-4 h-4" strokeWidth={2.5} />}
+                  {copied === "tracking-script" ? "Copiado" : "Copiar script"}
+                </button>
+              </div>
+              {nativeTrackingSnippet ? (
+                <pre className="min-h-[330px] max-h-[510px] overflow-auto rounded-xl p-4 text-[11px] leading-relaxed" style={{ background: "#0f172a", color: "#dbeafe" }}><code>{nativeTrackingSnippet}</code></pre>
+              ) : (
+                <div className="min-h-[330px] flex flex-col items-center justify-center text-center" style={{ color: "var(--text-4)" }}>
+                  <MousePointerClick className="w-10 h-10 mb-3" strokeWidth={1.5} />
+                  <p className="text-[13px] font-semibold">Preparando seu identificador de site</p>
+                  <p className="text-[12px] mt-1 max-w-sm">O Trackfy gera o código pronto para você colar antes de <code>&lt;/head&gt;</code> no seu site.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {[
+                { step: "1", title: "Copie e cole", text: "Cole o script uma vez, antes de </head>, em todas as páginas da sua landing page. Com Pixel preenchido, ele já inclui a Meta." },
+                { step: "2", title: "Crie UTMs", text: "Use Criar UTM para cada anúncio. Meta, Google, TikTok, e-mail e WhatsApp usam a URL final." },
+                { step: "3", title: "Marque o funil", text: "No botão de checkout use data-trackfy-funnel=\"begin_checkout\". Compra só deve sair de um pagamento confirmado." },
+                { step: "4", title: "Acompanhe aqui", text: "Abra Dados no Trackfy. GA4 é opcional e serve como uma segunda fonte de conferência." },
+              ].map((item) => (
+              <div key={item.step} className="card p-4 flex gap-3">
+                <span className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0" style={{ background: "var(--blue-muted)", color: "var(--blue)" }}>{item.step}</span>
+                <div><p className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>{item.title}</p><p className="text-[12px] mt-1 leading-relaxed" style={{ color: "var(--text-4)" }}>{item.text}</p></div>
+              </div>
+            ))}
+          </div>
+
+          <div className="card p-5">
+            <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>De onde vem cada número</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+              <div className="rounded-lg p-4" style={{ background: "var(--bg-subtle)" }}>
+                <p className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>Trackfy nativo</p>
+                <p className="text-[12px] mt-1 leading-relaxed" style={{ color: "var(--text-3)" }}>Dados no Trackfy mostra as visitas e o funil enviados pelo seu próprio site. É a sua visão principal de origem, UTM, orgânico, referência e direto.</p>
+              </div>
+              <div className="rounded-lg p-4" style={{ background: "var(--bg-subtle)" }}>
+                <p className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>Plataformas e GA4</p>
+                <p className="text-[12px] mt-1 leading-relaxed" style={{ color: "var(--text-3)" }}>Meta, Google e TikTok trazem gasto, impressões e cliques de anúncio. GA4 é opcional para auditoria. Nenhuma dessas telas substitui os dados de visita do seu site.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "data" && (
+        <div className="space-y-5">
+          <div className="card p-4 flex flex-col md:flex-row md:items-end gap-3">
+            <div className="flex-1">
+              <label className="section-label mb-1.5 block" style={{ padding: 0 }}>Dados da oferta/site</label>
+              <select value={tracker.id} onChange={(e) => selectSite(e.target.value)} className="select">
+                {sites.map((site) => <option key={site.id} value={site.id}>{site.name || "Oferta sem nome"}{site.websiteUrl ? ` — ${site.websiteUrl}` : ""}</option>)}
+              </select>
+            </div>
+            <button type="button" onClick={() => setActiveTab("tracking")} className="btn-secondary px-4 py-2">Configurar oferta</button>
+          </div>
+          <div className="card p-5 flex flex-col md:flex-row md:items-center gap-4">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--blue-muted)" }}>
+              <Database className="w-5 h-5" style={{ color: "var(--blue)" }} strokeWidth={2.25} />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-[15px] font-bold" style={{ color: "var(--text-1)" }}>Dados do seu site no Trackfy</h2>
+              <p className="text-[13px] mt-1" style={{ color: "var(--text-4)" }}>Últimos 30 dias. Estes números vêm do script instalado na sua página, não de estimativas das plataformas.</p>
+            </div>
+            <button type="button" onClick={loadSummary} disabled={summaryLoading || !tracker.siteId} className="btn-secondary px-3 py-2">
+              <RefreshCw className={`w-4 h-4 ${summaryLoading ? "animate-spin" : ""}`} strokeWidth={2.25} />
+              {summaryLoading ? "Atualizando" : "Atualizar dados"}
+            </button>
+          </div>
+
+          {!summary && !summaryError && (
+            <div className="card p-10 text-center">
+              <BarChart3 className="w-10 h-10 mx-auto mb-3" style={{ color: "var(--border-2)" }} strokeWidth={1.5} />
+              <p className="text-[14px] font-bold" style={{ color: "var(--text-2)" }}>Pronto para receber visitas</p>
+              <p className="text-[13px] mt-1 max-w-md mx-auto" style={{ color: "var(--text-4)" }}>Instale o script, abra uma URL UTM no seu site e clique em Atualizar dados. O primeiro acesso passa a aparecer aqui.</p>
+            </div>
+          )}
+
+          {summaryError && (
+            <div className="rounded-lg p-4" style={{ background: "var(--yellow-light)", border: "1px solid rgba(202,138,4,0.18)" }}>
+              <p className="text-[13px] font-bold" style={{ color: "var(--text-2)" }}>O coletor ainda não está pronto</p>
+              <p className="text-[12px] mt-1" style={{ color: "var(--text-3)" }}>{summaryError} Configure a chave de serviço do Supabase no backend e execute a migração de eventos uma vez.</p>
+            </div>
+          )}
+
+          {summary && (
+            <>
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+                  <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Validador do funil da oferta</h2>
+                  <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Mostra eventos realmente recebidos. Etapa zerada significa que ela ainda não foi instalada ou acionada no site.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-5 divide-y md:divide-y-0 md:divide-x" style={{ borderColor: "var(--border)" }}>
+                  {[
+                    { event: "page_view", label: "Página aberta", fix: "O script Trackfy no head envia automaticamente." },
+                    { event: "view_item", label: "Oferta vista", fix: "Marque o CTA/área com data-trackfy-funnel=\"view_item\"." },
+                    { event: "generate_lead", label: "Lead confirmado", fix: "Dispare trackfyEvent após sucesso real do formulário." },
+                    { event: "begin_checkout", label: "Checkout iniciado", fix: "Marque o botão de pagamento com begin_checkout." },
+                    { event: "purchase", label: "Compra aprovada", fix: "Dispare trackfyPurchase somente após confirmação real." },
+                  ].map((step) => {
+                    const count = summary.eventCounts?.[step.event] ?? 0;
+                    return <div key={step.event} className="p-4"><div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: count > 0 ? "var(--green)" : "var(--yellow)" }} /><p className="text-[12px] font-bold" style={{ color: "var(--text-2)" }}>{step.label}</p></div><p className="text-[24px] font-bold mt-2" style={{ color: "var(--text-1)" }}>{count}</p><p className="text-[11px] mt-2 leading-relaxed" style={{ color: "var(--text-4)" }}>{count > 0 ? "Evento recebido pelo Trackfy." : step.fix}</p></div>;
+                  })}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { label: "Visitas", value: summary.totals.visits, detail: "page_view" },
+                  { label: "Leads", value: summary.totals.leads, detail: "generate_lead" },
+                  { label: "Checkout", value: summary.totals.checkouts, detail: "begin_checkout" },
+                  { label: "Compras", value: summary.totals.purchases, detail: "purchase confirmado" },
+                ].map((metric) => (
+                  <div key={metric.label} className="card p-4">
+                    <p className="text-[12px] font-semibold" style={{ color: "var(--text-4)" }}>{metric.label}</p>
+                    <p className="text-[24px] font-bold mt-1" style={{ color: "var(--text-1)" }}>{metric.value}</p>
+                    <p className="text-[11px] mt-1" style={{ color: "var(--text-4)" }}>{metric.detail}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+                  <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Funil por fonte de dados</h2>
+                  <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Pago: UTM de mídia. Orgânico: buscador sem UTM. Referência: outro site/rede social. Direto: sem UTM e sem referência.</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead style={{ background: "var(--bg-subtle)" }}><tr>
+                      {["Fonte", "Visitas", "Leads", "Checkout", "Compras"].map((column) => <th key={column} className="px-5 py-3 text-[11px] font-bold uppercase" style={{ color: "var(--text-4)" }}>{column}</th>)}
+                    </tr></thead>
+                    <tbody>{summary.channels.map((channel) => (
+                      <tr key={channel.channel} className="border-t" style={{ borderColor: "var(--border)" }}>
+                        <td className="px-5 py-3 text-[13px] font-semibold" style={{ color: "var(--text-2)" }}>{sourceLabel(channel.channel)}</td>
+                        <td className="px-5 py-3 text-[13px]" style={{ color: "var(--text-3)" }}>{channel.visits}</td>
+                        <td className="px-5 py-3 text-[13px]" style={{ color: "var(--text-3)" }}>{channel.leads}</td>
+                        <td className="px-5 py-3 text-[13px]" style={{ color: "var(--text-3)" }}>{channel.checkouts}</td>
+                        <td className="px-5 py-3 text-[13px]" style={{ color: "var(--text-3)" }}>{channel.purchases}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="card overflow-hidden">
+                  <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+                    <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Páginas rastreadas</h2>
+                    <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Uma página aparece aqui assim que alguém abre uma página que tem o script Trackfy instalado.</p>
+                  </div>
+                  <div className="max-h-[390px] overflow-auto">
+                    {summary.pages.length === 0 ? <p className="px-5 py-8 text-[13px]" style={{ color: "var(--text-4)" }}>Nenhuma página recebeu visita ainda.</p> : summary.pages.map((page) => (
+                      <div key={page.url || page.path} className="px-5 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                        <p className="font-mono text-[12px] truncate" title={page.url || page.path} style={{ color: "var(--text-2)" }}>{page.url || page.path}</p>
+                        <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>{page.visits} visitas · {page.leads} leads · {page.checkouts} checkout · {page.purchases} compras</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="card overflow-hidden">
+                  <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
+                    <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>UTMs e campanhas recebidas</h2>
+                    <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Mostra somente UTMs que chegaram de verdade ao seu site.</p>
+                  </div>
+                  <div className="max-h-[390px] overflow-auto">
+                    {summary.campaigns.length === 0 ? <p className="px-5 py-8 text-[13px]" style={{ color: "var(--text-4)" }}>Nenhuma UTM recebida ainda.</p> : summary.campaigns.map((campaign) => (
+                      <div key={`${campaign.source}-${campaign.medium}-${campaign.campaign}`} className="px-5 py-3 border-b" style={{ borderColor: "var(--border)" }}>
+                        <p className="text-[13px] font-semibold truncate" style={{ color: "var(--text-2)" }}>{campaign.campaign}</p>
+                        <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>{campaign.source} / {campaign.medium} · {campaign.visits} visitas</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: "var(--border)" }}>
+                  <div><h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Atividade recente</h2><p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Atualiza a cada 15 segundos enquanto esta aba estiver aberta.</p></div>
+                  <span className="badge badge-blue">Ao vivo</span>
+                </div>
+                <div className="max-h-[340px] overflow-auto">
+                  {summary.recentEvents.length === 0 ? <p className="px-5 py-8 text-[13px]" style={{ color: "var(--text-4)" }}>Aguardando o primeiro evento.</p> : summary.recentEvents.map((event, index) => (
+                    <div key={`${event.createdAt}-${index}`} className="px-5 py-3 border-b flex items-center justify-between gap-4" style={{ borderColor: "var(--border)" }}>
+                      <div className="min-w-0"><p className="text-[13px] font-semibold" style={{ color: "var(--text-2)" }}>{event.event}</p><p className="font-mono text-[11px] truncate mt-0.5" style={{ color: "var(--text-4)" }}>{event.source} · {event.campaign} · {event.page}</p></div>
+                      <span className="text-[11px] shrink-0" style={{ color: "var(--text-4)" }}>{new Date(event.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Trackfy — Meta Ads Manager
 
-## Getting Started
+Dashboard SaaS premium para gestão de campanhas Meta Ads com IA integrada.
 
-First, run the development server:
+## Stack
+
+- **Next.js 14** (App Router)
+- **TypeScript**
+- **Tailwind CSS** + Design System próprio com CSS Variables
+- **Supabase** (Auth + PostgreSQL)
+- **Zustand** (estado global)
+- **Recharts** (gráficos)
+- **Gemini AI** (assistente)
+
+## Início rápido
 
 ```bash
+# Instalar dependências
+npm install
+
+# Rodar em desenvolvimento
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse: http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Configuração
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 1. Supabase
 
-## Learn More
+Execute o SQL em `supabase/reset_and_setup.sql` no SQL Editor do painel Supabase.
 
-To learn more about Next.js, take a look at the following resources:
+No painel Supabase:
+- **Authentication → Providers → Email** → desmarcar "Confirm email"
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 2. Variáveis de ambiente
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Edite `.env.local`:
 
-## Deploy on Vercel
+```env
+# Gemini AI (opcional)
+GEMINI_API_KEY=sua_chave_aqui
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 3. Credenciais Meta Ads
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Configure em **Dashboard → Configurações → Meta Ads**:
+- Access Token (long-lived)
+- Ad Account ID (sem o prefixo `act_`)
+
+## Páginas
+
+| Rota | Descrição |
+|------|-----------|
+| `/` | Landing page |
+| `/login` | Login / Registro |
+| `/dashboard` | Dashboard principal |
+| `/dashboard/resumo` | Resumo consolidado |
+| `/dashboard/campaigns` | Gerenciador Meta Ads |
+| `/dashboard/creatives` | Hub de Criativos |
+| `/dashboard/google` | Google Ads |
+| `/dashboard/tiktok` | TikTok Analytics |
+| `/dashboard/utms` | Gerador de UTMs |
+| `/dashboard/rules` | Automações |
+| `/dashboard/taxas` | Taxas e impostos |
+| `/dashboard/finance` | Financeiro |
+| `/dashboard/relatorios` | Relatórios |
+| `/dashboard/profile` | Perfil |
+| `/dashboard/settings` | Configurações |
+| `/dashboard/notifications` | Notificações |
+
+## Design System
+
+O projeto usa CSS Variables para theming consistente:
+
+```css
+--bg, --surface, --border   /* Superfícies */
+--text-1 → --text-4         /* Hierarquia de texto */
+--blue, --green, --red       /* Cores de status */
+--r-sm → --r-2xl             /* Border radius */
+--shadow-xs → --shadow-xl    /* Sombras */
+```
+
+Classes utilitárias: `.card`, `.btn-primary`, `.btn-secondary`, `.btn-ghost`, `.input`, `.select`, `.badge-*`, `.nav-item`
