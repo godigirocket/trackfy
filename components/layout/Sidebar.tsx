@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, FileText,
   Tag, Zap, Percent, Receipt, BarChart2, Settings, User,
-  LogOut, Bell, Image, ChevronRight, Crown, Wrench, PanelLeftClose, PanelLeftOpen, Target, Lightbulb,
+  LogOut, Bell, Image, ChevronRight, Crown, Wrench, PanelLeftClose, PanelLeftOpen, Target, Lightbulb, Radar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandIcon } from "@/components/shared/BrandIcon";
@@ -21,6 +21,7 @@ const nav = [
       { href: "/dashboard",        label: "Dashboard", icon: LayoutDashboard },
       { href: "/dashboard/operacao", label: "Operação", icon: Target },
       { href: "/dashboard/intelligence", label: "Inteligência", icon: Lightbulb },
+      { href: "/dashboard/market", label: "Mercado/Spy", icon: Radar },
       { href: "/dashboard/resumo", label: "Resumo",    icon: FileText },
       { href: "/dashboard/tools",  label: "Ferramentas", icon: Wrench },
     ],
