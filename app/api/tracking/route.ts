@@ -114,7 +114,7 @@ function eventIdentity(row: TrackingRow) {
 
 function sessionKey(row: TrackingRow) {
   const identity = eventIdentity(row);
-  if (identity.session) return identity.session;
+  if (identity.session) return `${identity.session}|${row.source}|${row.medium}|${row.campaign}`;
   return row.event_id || `${row.source}|${row.medium}|${row.campaign}|${row.created_at.slice(0, 16)}`;
 }
 
