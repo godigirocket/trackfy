@@ -70,6 +70,16 @@ function cleanPageUrl(pageUrl: string | null, fallbackPath: string) {
   }
 }
 
+function contentFromUrl(pageUrl: string | null) {
+  if (!pageUrl) return undefined;
+  try {
+    const url = new URL(pageUrl, "https://trackfy.local");
+    return url.searchParams.get("utm_content") ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 type TrackingRow = {
   event_name: string;
   event_id: string | null;
@@ -138,6 +148,13 @@ function uniqueVisitorCount(rows: TrackingRow[]) {
 
 function uniqueEventSessionCount(rows: TrackingRow[], eventName: string) {
   return new Set(rows.filter((row) => row.event_name === eventName).map(sessionKey)).size;
+}
+
+function uniqueEventCount(rows: TrackingRow[], eventName: string) {
+  const eventRows = rows.filter((row) => row.event_name === eventName);
+  const withId = eventRows.map((row) => row.event_id).filter(Boolean);
+  if (withId.length) return new Set(withId).size;
+  return eventRows.length;
 }
 
 function uniquePurchaseCount(rows: TrackingRow[]) {
@@ -343,12 +360,14 @@ export async function GET(request: NextRequest) {
   const pageViews = rows.filter((row) => row.event_name === "page_view").length;
   const attributedSessions = uniqueSessionCount(rows.filter((row) => row.channel !== "direct" && row.channel !== "unknown"));
   const attributedVisitors = uniqueVisitorCount(rows.filter((row) => row.channel !== "direct" && row.channel !== "unknown"));
-  const eventCounts = ["page_view", "view_item", "generate_lead", "begin_checkout", "add_payment_info", "purchase"].reduce<Record<string, number>>((counts, eventName) => {
+  const eventCounts = ["page_view", "view_item", "generate_lead", "begin_checkout", "add_payment_info", "payment_selected", "order_bump_add", "order_bump_remove", "purchase", "post_purchase_view", "post_purchase_offer_click", "upsell_click"].reduce<Record<string, number>>((counts, eventName) => {
     counts[eventName] = eventName === "purchase"
       ? uniquePurchaseCount(rows)
       : eventName === "page_view"
         ? uniqueSessionCount(rows)
-        : uniqueEventSessionCount(rows, eventName);
+        : ["order_bump_add", "order_bump_remove", "payment_selected", "post_purchase_view", "post_purchase_offer_click", "upsell_click"].includes(eventName)
+          ? uniqueEventCount(rows, eventName)
+          : uniqueEventSessionCount(rows, eventName);
     return counts;
   }, {});
   const channels = ["paid", "organic", "referral", "direct", "unknown"].map((channel) => {
@@ -406,6 +425,9 @@ export async function GET(request: NextRequest) {
       leads: uniqueEventSessionCount(rows, "generate_lead"),
       checkouts: uniqueEventSessionCount(rows, "begin_checkout"),
       payments: uniqueEventSessionCount(rows, "add_payment_info"),
+      paymentSelections: uniqueEventCount(rows, "payment_selected"),
+      orderBumps: uniqueEventCount(rows, "order_bump_add"),
+      postPurchaseClicks: uniqueEventCount(rows, "post_purchase_offer_click") + uniqueEventCount(rows, "upsell_click"),
       purchases: uniquePurchaseCount(rows),
       events: rows.length,
       attributedSessions,
@@ -440,6 +462,6 @@ export async function GET(request: NextRequest) {
       totalValue: Number(contact.total_value ?? 0),
       currency: contact.currency,
     })),
-    recentEvents: rows.slice(0, 20).map((row) => ({ event: row.event_name, page: row.page_path, source: row.source, campaign: row.campaign, createdAt: row.created_at })),
+    recentEvents: rows.slice(0, 30).map((row) => ({ event: row.event_name, page: row.page_path, source: row.source, campaign: row.campaign, content: contentFromUrl(row.page_url), value: Number(row.value ?? 0), createdAt: row.created_at })),
   });
 }

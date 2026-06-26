@@ -134,21 +134,23 @@ function buildNativeTrackingSnippet(endpoint: string, siteId: string, measuremen
 type TrackingSummary = {
   updatedAt: string;
   range?: { days: number; since: string };
-  totals: { visits: number; visitors?: number; pageViews?: number; leads: number; checkouts: number; payments?: number; purchases: number; paidOrders?: number; refundedOrders?: number; revenue?: number; refunds?: number; events?: number; attributedSessions?: number; attributedVisitors?: number; savedLeads?: number; savedBuyers?: number };
+  totals: { visits: number; visitors?: number; pageViews?: number; leads: number; checkouts: number; payments?: number; paymentSelections?: number; orderBumps?: number; postPurchaseClicks?: number; purchases: number; paidOrders?: number; refundedOrders?: number; revenue?: number; refunds?: number; events?: number; attributedSessions?: number; attributedVisitors?: number; savedLeads?: number; savedBuyers?: number };
   channels: Array<{ channel: TrafficChannel; visits: number; leads: number; checkouts: number; purchases: number; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
   pages: Array<{ path: string; url: string | null; visits: number; leads: number; checkouts: number; purchases: number; lastSeen: string }>;
   campaigns: Array<{ source: string; medium: string; campaign: string; visits: number; leads?: number; checkouts?: number; purchases?: number; lastSeen: string; paidOrders?: number; revenue?: number; netRevenue?: number; conversionRate?: number }>;
-  recentEvents: Array<{ event: string; page: string; source: string; campaign: string; createdAt: string }>;
+  recentEvents: Array<{ event: string; page: string; source: string; campaign: string; content?: string; value?: number; createdAt: string }>;
   contacts?: Array<{ name: string | null; email: string | null; phone: string | null; source: string; medium: string; campaign: string; firstPage: string | null; lastPage: string | null; firstSeenAt: string; lastSeenAt: string; leadAt: string | null; purchaseAt: string | null; ordersCount: number; totalValue: number; currency: string }>;
   eventCounts: Record<string, number>;
 };
 
-export default function UTMsPage() {
+type UTMTab = "create" | "list" | "tracking" | "data";
+
+export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTab } = {}) {
   const [utms, setUTMs]   = useState<UTMEntry[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [form, setForm]   = useState({ url: "", source: "", medium: "", campaign: "", term: "", content: "" });
-  const [activeTab, setActiveTab] = useState<"create" | "list" | "tracking" | "data">("create");
+  const [activeTab, setActiveTab] = useState<UTMTab>(initialTab);
   const [tracker, setTracker] = useState<TrackingSite>({ id: "", name: "", websiteUrl: "", measurementId: "", metaPixelId: "", siteId: "", endpoint: "", installed: false });
   const [sites, setSites] = useState<TrackingSite[]>([]);
   const [sitesReady, setSitesReady] = useState(false);
@@ -327,6 +329,9 @@ export default function UTMsPage() {
   const averageOrder = paidOrders > 0 ? revenue / paidOrders : 0;
   const revenuePerSession = summary && summary.totals.visits > 0 ? revenue / summary.totals.visits : 0;
   const paymentCount = summary?.totals.payments ?? summary?.eventCounts?.add_payment_info ?? 0;
+  const paymentSelections = summary?.totals.paymentSelections ?? summary?.eventCounts?.payment_selected ?? 0;
+  const orderBumpCount = summary?.totals.orderBumps ?? summary?.eventCounts?.order_bump_add ?? 0;
+  const postPurchaseCount = summary?.totals.postPurchaseClicks ?? ((summary?.eventCounts?.post_purchase_offer_click ?? 0) + (summary?.eventCounts?.upsell_click ?? 0));
   const checkoutGap = summary ? Math.max(0, summary.totals.checkouts - summary.totals.purchases) : 0;
   const purchaseWithoutValue = summary ? summary.totals.purchases > 0 && revenue <= 0 : false;
   const sessionWord = (count: number) => count === 1 ? "sessão" : "sessões";
@@ -857,6 +862,79 @@ export default function UTMsPage() {
                 </div>
               )}
 
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+                {[
+                  { label: "Order bumps", value: orderBumpCount, detail: "Bumps aceitos/clicados", color: "var(--blue)", event: "order_bump_add" },
+                  { label: "Pagamento escolhido", value: paymentSelections || paymentCount, detail: "Pix, cartão ou gateway", color: "var(--yellow)", event: "payment_selected" },
+                  { label: "Compra paga", value: summary.totals.purchases, detail: "Purchase confirmado", color: "var(--green)", event: "purchase" },
+                  { label: "Pós-venda", value: postPurchaseCount, detail: "Upsell/obrigado clicado", color: "#7c3aed", event: "post_purchase_offer_click" },
+                ].map((item) => (
+                  <div key={item.label} className="card p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[12px] font-bold" style={{ color: "var(--text-2)" }}>{item.label}</p>
+                      <span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ background: `${item.color}18`, color: item.color }}>{item.event}</span>
+                    </div>
+                    <p className="text-[28px] font-bold mt-2 tabular-nums" style={{ color: item.color }}>{item.value}</p>
+                    <p className="text-[11px] mt-1" style={{ color: "var(--text-4)" }}>{item.detail}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4 border-b flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3" style={{ borderColor: "var(--border)" }}>
+                  <div>
+                    <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Instalação para checkout, bumps e pós-venda</h2>
+                    <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Use esses eventos na sua página. A compra deve ser disparada somente quando o pagamento estiver aprovado.</p>
+                  </div>
+                  <button type="button" className="btn-secondary px-3 py-2" onClick={() => handleCopy(`<button data-trackfy-bump="vitalicio" data-trackfy-value="49.90">Adicionar acesso vitalicio</button>
+<button data-trackfy-payment="pix" data-trackfy-value="67.90">Pagar com Pix</button>
+<script>
+window.trackfyPurchase({
+  transaction_id: "ID_DO_PEDIDO",
+  value: 117.80,
+  currency: "BRL",
+  name: "Nome do cliente",
+  email: "cliente@email.com",
+  phone: "11999999999"
+});
+</script>
+<button data-trackfy-post-purchase="upsell_vip" data-trackfy-value="97">Quero o upsell VIP</button>`, "checkout-events")}>
+                    {copied === "checkout-events" ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    {copied === "checkout-events" ? "Copiado" : "Copiar eventos"}
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
+                  <pre className="p-5 overflow-auto text-[11px] leading-relaxed" style={{ background: "#0f172a", color: "#dbeafe" }}><code>{`<!-- Order bump aceito -->
+<button data-trackfy-bump="vitalicio" data-trackfy-value="49.90">
+  Adicionar acesso vitalicio
+</button>
+
+<!-- Metodo de pagamento escolhido -->
+<button data-trackfy-payment="pix" data-trackfy-value="117.80">
+  Pagar com Pix
+</button>
+
+<!-- Pos-venda / upsell -->
+<button data-trackfy-post-purchase="upsell_vip" data-trackfy-value="97">
+  Quero o upsell VIP
+</button>`}</code></pre>
+                  <pre className="p-5 overflow-auto text-[11px] leading-relaxed border-t lg:border-t-0 lg:border-l" style={{ background: "var(--bg-subtle)", color: "var(--text-2)", borderColor: "var(--border)" }}><code>{`// Dispare somente apos pagamento aprovado:
+window.trackfyPurchase({
+  transaction_id: "ID_DO_PEDIDO",
+  value: 117.80, // produto + bumps pagos
+  currency: "BRL",
+  name: "Nome do cliente",
+  email: "cliente@email.com",
+  phone: "11999999999"
+});
+
+// Alternativa por JS:
+window.trackfyOrderBump({ id: "vitalicio", value: 49.90 });
+window.trackfyPayment({ method: "pix", value: 117.80 });
+window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
+                </div>
+              </div>
+
               <div className="card overflow-hidden">
                 <div className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 border-b" style={{ borderColor: "var(--border)" }}>
                   <div>
@@ -1158,14 +1236,16 @@ export default function UTMsPage() {
                   <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Saúde do tracking</h2>
                   <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Mostra sessões/eventos consolidados. Etapa zerada significa que ela ainda não foi instalada ou acionada no site.</p>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 divide-y md:divide-y-0 md:divide-x" style={{ borderColor: "var(--border)" }}>
+                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 divide-y md:divide-y-0 md:divide-x" style={{ borderColor: "var(--border)" }}>
                   {[
                     { event: "page_view", label: "Sessão aberta", fix: "O script Trackfy no head envia automaticamente." },
                     { event: "view_item", label: "Oferta vista", fix: "Marque o CTA/área com data-trackfy-funnel=\"view_item\"." },
                     { event: "generate_lead", label: "Lead confirmado", fix: "Dispare trackfyEvent após sucesso real do formulário." },
                     { event: "begin_checkout", label: "Checkout iniciado", fix: "Marque o botão de pagamento com begin_checkout." },
                     { event: "add_payment_info", label: "Pix/pagamento", fix: "Dispare add_payment_info ao abrir Pix ou cartão." },
+                    { event: "order_bump_add", label: "Order bump", fix: "Use data-trackfy-bump ou trackfyOrderBump no bump." },
                     { event: "purchase", label: "Compra aprovada", fix: "Dispare trackfyPurchase somente após confirmação real." },
+                    { event: "post_purchase_offer_click", label: "Pós-venda", fix: "Use data-trackfy-post-purchase no upsell/obrigado." },
                   ].map((step) => {
                     const count = summary.eventCounts?.[step.event] ?? 0;
                     return <div key={step.event} className="p-4"><div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: count > 0 ? "var(--green)" : "var(--yellow)" }} /><p className="text-[12px] font-bold" style={{ color: "var(--text-2)" }}>{step.label}</p></div><p className="text-[24px] font-bold mt-2" style={{ color: "var(--text-1)" }}>{count}</p><p className="text-[11px] mt-2 leading-relaxed" style={{ color: "var(--text-4)" }}>{count > 0 ? "Evento recebido pelo Trackfy." : step.fix}</p></div>;
@@ -1251,7 +1331,7 @@ export default function UTMsPage() {
                 <div className="max-h-[340px] overflow-auto">
                   {summary.recentEvents.length === 0 ? <p className="px-5 py-8 text-[13px]" style={{ color: "var(--text-4)" }}>Aguardando o primeiro evento.</p> : summary.recentEvents.map((event, index) => (
                     <div key={`${event.createdAt}-${index}`} className="px-5 py-3 border-b flex items-center justify-between gap-4" style={{ borderColor: "var(--border)" }}>
-                      <div className="min-w-0"><p className="text-[13px] font-semibold" style={{ color: "var(--text-2)" }}>{event.event}</p><p className="font-mono text-[11px] truncate mt-0.5" style={{ color: "var(--text-4)" }}>{event.source} · {event.campaign} · {event.page}</p></div>
+                      <div className="min-w-0"><p className="text-[13px] font-semibold" style={{ color: "var(--text-2)" }}>{event.event}{event.value ? ` · ${event.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}` : ""}</p><p className="font-mono text-[11px] truncate mt-0.5" style={{ color: "var(--text-4)" }}>{event.source} · {event.campaign} · {event.content || event.page}</p></div>
                       <span className="text-[11px] shrink-0" style={{ color: "var(--text-4)" }}>{new Date(event.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
                     </div>
                   ))}

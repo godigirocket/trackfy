@@ -45,6 +45,7 @@ const nav = [
     group: "Ferramentas",
     items: [
       { href: "/dashboard/utms",       label: "UTMs",       icon: Tag },
+      { href: "/dashboard/rastreamento", label: "Rastreamento", icon: BarChart2 },
       { href: "/dashboard/rules",      label: "Regras",     icon: Zap },
       { href: "/dashboard/taxas",      label: "Taxas",      icon: Percent },
       { href: "/dashboard/finance",    label: "Despesas",   icon: Receipt },
