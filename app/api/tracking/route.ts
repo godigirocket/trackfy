@@ -88,6 +88,7 @@ type TrackingRow = {
   source: string;
   medium: string;
   campaign: string;
+  content: string | null;
   channel: string;
   created_at: string;
   value: number | null;
@@ -331,7 +332,7 @@ export async function GET(request: NextRequest) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("trackfy_events")
-    .select("event_name,event_id,page_path,page_url,source,medium,campaign,channel,created_at,value")
+    .select("event_name,event_id,page_path,page_url,source,medium,campaign,content,channel,created_at,value")
     .eq("site_id", siteId)
     .gte("created_at", since)
     .order("created_at", { ascending: false })
@@ -462,6 +463,6 @@ export async function GET(request: NextRequest) {
       totalValue: Number(contact.total_value ?? 0),
       currency: contact.currency,
     })),
-    recentEvents: rows.slice(0, 30).map((row) => ({ event: row.event_name, page: row.page_path, source: row.source, campaign: row.campaign, content: contentFromUrl(row.page_url), value: Number(row.value ?? 0), createdAt: row.created_at })),
+    recentEvents: rows.slice(0, 30).map((row) => ({ event: row.event_name, page: row.page_path, source: row.source, campaign: row.campaign, content: row.content || contentFromUrl(row.page_url), value: Number(row.value ?? 0), createdAt: row.created_at })),
   });
 }
