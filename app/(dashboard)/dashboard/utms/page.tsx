@@ -143,7 +143,7 @@ type TrackingSummary = {
   eventCounts: Record<string, number>;
 };
 
-type UTMTab = "create" | "list" | "tracking" | "data";
+type UTMTab = "create" | "list" | "tracking" | "data" | "checkout" | "contacts" | "debug";
 
 export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTab } = {}) {
   const [utms, setUTMs]   = useState<UTMEntry[]>([]);
@@ -237,7 +237,7 @@ export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTa
   };
 
   useEffect(() => {
-    if (activeTab !== "data" || !tracker.siteId) return;
+    if (!["data", "checkout", "contacts", "debug"].includes(activeTab) || !tracker.siteId) return;
     loadSummary();
     const timer = window.setInterval(loadSummary, 5000);
     return () => window.clearInterval(timer);
@@ -345,60 +345,102 @@ export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTa
     { label: "Pageview coerente", ok: pageViewCount >= summary.totals.visits, detail: `${pageViewCount} pageviews para ${summary.totals.visits} sessões.` },
     { label: "Compra deduplicada", ok: summary.totals.purchases <= Math.max(summary.totals.checkouts, summary.totals.purchases), detail: "Compra usa ID do pedido quando enviado." },
   ] : [];
+  const tabMeta: Record<UTMTab, { eyebrow: string; title: string; description: string }> = {
+    create: { eyebrow: "Criação", title: "Monte links limpos para cada anúncio", description: "Padronize source, medium, campanha, criativo e palavra-chave sem bagunçar as métricas." },
+    list: { eyebrow: "Biblioteca", title: "UTMs salvas por oferta", description: "Copie links prontos, busque campanhas e mantenha cada site separado." },
+    tracking: { eyebrow: "Instalação", title: "Script único do Trackfy", description: "Cole uma vez no site e acompanhe visitas, funil, vendas e origem aqui dentro." },
+    data: { eyebrow: "Dashboard", title: "Resultado real do site", description: "Veja sessões, checkout, compras e receita sem depender só das plataformas de anúncio." },
+    checkout: { eyebrow: "Eventos", title: "Checkout, bumps e pós-venda", description: "Marque Pix, bump, compra aprovada e upsell para saber onde o dinheiro trava." },
+    contacts: { eyebrow: "Leads", title: "Leads e compradores salvos", description: "Centralize contatos enviados por formulário, checkout e compra aprovada." },
+    debug: { eyebrow: "Auditoria", title: "Precisão e reset do tracking", description: "Confira eventos recebidos, páginas rastreadas e limpe métricas de teste." },
+  };
+  const activeMeta = tabMeta[activeTab];
+  const setupItems = [
+    { label: "Oferta", ok: Boolean(tracker.name && tracker.siteId), detail: tracker.name || "Sem nome" },
+    { label: "Domínio", ok: Boolean(tracker.websiteUrl), detail: tracker.websiteUrl || "Cadastre na aba Instalar" },
+    { label: "Script", ok: Boolean(nativeTrackingSnippet), detail: nativeTrackingSnippet ? "Pronto para copiar" : "Gerando código" },
+    { label: "Meta Pixel", ok: Boolean(tracker.metaPixelId), detail: tracker.metaPixelId || "Opcional" },
+  ];
 
   return (
     <div className="max-w-[1100px] mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-[20px] font-bold tracking-tight" style={{ color: "var(--text-1)" }}>Gerador de UTMs</h1>
-          <p className="text-[13px] mt-0.5" style={{ color: "var(--text-4)" }}>
-            Crie e gerencie parâmetros UTM para rastrear suas campanhas
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="badge badge-blue">{utms.length} UTMs salvos</span>
-          {utmsSyncing && <span className="text-[11px]" style={{ color: "var(--text-4)" }}>Sincronizando...</span>}
-        </div>
-      </div>
-
-      <div className="card p-4 flex flex-col md:flex-row md:items-end gap-3">
-        <div className="flex-1">
-          <label className="section-label mb-1.5 block" style={{ padding: 0 }}>Oferta/site para estas UTMs</label>
-          <select value={tracker.id} onChange={(e) => selectSite(e.target.value)} className="select">
-            {sites.map((site) => <option key={site.id} value={site.id}>{site.name || "Oferta sem nome"}{site.websiteUrl ? ` — ${site.websiteUrl}` : ""}</option>)}
-          </select>
-        </div>
-        <button type="button" onClick={() => setActiveTab("tracking")} className="btn-secondary px-4 py-2">Gerenciar ofertas</button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        {[
-          { step: "1", title: "Instale o Trackfy", text: "Cole um único script no seu site. GA4 é opcional, não é onde você precisa trabalhar." },
-          { step: "2", title: "Crie a UTM", text: "Nesta página, gere uma URL para cada campanha e criativo." },
-          { step: "3", title: "Cole no anúncio", text: "Use a URL final com UTM no Meta, TikTok, e-mail ou WhatsApp." },
-          { step: "4", title: "Veja os dados", text: "Abra Dados no Trackfy para ver visitas, leads, checkout e compras por origem." },
-        ].map((item) => (
-          <div key={item.step} className="card p-4 flex gap-3">
-            <span className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[12px] font-bold" style={{ background: "var(--blue-muted)", color: "var(--blue)" }}>{item.step}</span>
-            <div>
-              <p className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>{item.title}</p>
-              <p className="text-[12px] mt-1 leading-relaxed" style={{ color: "var(--text-4)" }}>{item.text}</p>
+      <div className="rounded-2xl overflow-hidden border" style={{ borderColor: "var(--border)", background: "var(--surface)", boxShadow: "var(--shadow-sm)" }}>
+        <div className="p-5 lg:p-6" style={{ background: "linear-gradient(135deg, #0f172a 0%, #172554 46%, #064e3b 100%)" }}>
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+            <div className="max-w-2xl">
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: "#bfdbfe" }}>{activeMeta.eyebrow}</p>
+              <h1 className="text-[24px] lg:text-[28px] font-bold mt-2 text-white">Central de UTMs & Rastreamento</h1>
+              <p className="text-[14px] mt-2 leading-relaxed text-slate-200">{activeMeta.title}. {activeMeta.description}</p>
+              <div className="flex flex-wrap gap-2 mt-4">
+                <button type="button" onClick={() => setActiveTab("create")} className="px-3 py-2 rounded-lg text-[12px] font-bold text-white" style={{ background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.18)" }}>
+                  <Plus className="w-3.5 h-3.5 inline mr-1" strokeWidth={2.5} /> Nova UTM
+                </button>
+                <button type="button" onClick={() => setActiveTab("data")} className="px-3 py-2 rounded-lg text-[12px] font-bold text-white" style={{ background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.18)" }}>
+                  <BarChart3 className="w-3.5 h-3.5 inline mr-1" strokeWidth={2.5} /> Ver métricas
+                </button>
+                <button type="button" onClick={() => setActiveTab("checkout")} className="px-3 py-2 rounded-lg text-[12px] font-bold text-white" style={{ background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.18)" }}>
+                  <MousePointerClick className="w-3.5 h-3.5 inline mr-1" strokeWidth={2.5} /> Eventos do funil
+                </button>
+              </div>
+            </div>
+            <div className="w-full lg:w-[360px] rounded-xl p-4" style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.16)", backdropFilter: "blur(10px)" }}>
+              <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-300">Oferta ativa</label>
+              <select value={tracker.id} onChange={(e) => selectSite(e.target.value)} className="select mt-2" style={{ background: "rgba(255,255,255,0.95)" }}>
+                {sites.map((site) => <option key={site.id} value={site.id}>{site.name || "Oferta sem nome"}{site.websiteUrl ? ` — ${site.websiteUrl}` : ""}</option>)}
+              </select>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <button type="button" onClick={() => setActiveTab("tracking")} className="px-3 py-2 rounded-lg text-[12px] font-bold text-white" style={{ background: "rgba(255,255,255,0.13)", border: "1px solid rgba(255,255,255,0.14)" }}>Configurar</button>
+                <button type="button" onClick={createSite} className="px-3 py-2 rounded-lg text-[12px] font-bold text-white" style={{ background: "rgba(16,185,129,0.24)", border: "1px solid rgba(16,185,129,0.32)" }}>Nova oferta</button>
+              </div>
             </div>
           </div>
-        ))}
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0" style={{ borderColor: "var(--border)" }}>
+          {setupItems.map((item) => (
+            <div key={item.label} className="p-4 min-h-[96px]">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-bold uppercase" style={{ color: "var(--text-4)" }}>{item.label}</p>
+                <span className="w-2.5 h-2.5 rounded-full" style={{ background: item.ok ? "var(--green)" : "var(--yellow)" }} />
+              </div>
+              <p className="text-[13px] font-bold mt-2 truncate" style={{ color: "var(--text-1)" }}>{item.detail}</p>
+              <p className="text-[11px] mt-1" style={{ color: "var(--text-4)" }}>{item.ok ? "Configurado" : "Pendente"}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
+      {["create", "list", "tracking"].includes(activeTab) && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          {[
+            { step: "1", title: "Instale o Trackfy", text: "Cole um único script no seu site. GA4 é opcional, não é onde você precisa trabalhar." },
+            { step: "2", title: "Crie a UTM", text: "Nesta página, gere uma URL para cada campanha e criativo." },
+            { step: "3", title: "Cole no anúncio", text: "Use a URL final com UTM no Meta, TikTok, e-mail ou WhatsApp." },
+            { step: "4", title: "Veja os dados", text: "Abra Dashboard para ver visitas, leads, checkout e compras por origem." },
+          ].map((item) => (
+            <div key={item.step} className="card p-4 flex gap-3">
+              <span className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[12px] font-bold" style={{ background: "var(--blue-muted)", color: "var(--blue)" }}>{item.step}</span>
+              <div>
+                <p className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>{item.title}</p>
+                <p className="text-[12px] mt-1 leading-relaxed" style={{ color: "var(--text-4)" }}>{item.text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Tabs */}
-      <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: "var(--bg-muted)" }}>
+      <div className="flex gap-1 p-1 rounded-xl w-full overflow-x-auto" style={{ background: "var(--bg-muted)" }}>
         {[
-          { id: "create", label: "Criar UTM" },
-          { id: "list", label: `Salvos (${utms.length})` },
-          { id: "tracking", label: "Instalar rastreamento" },
-          { id: "data", label: "Dados no Trackfy" },
+          { id: "create", label: "Criar" },
+          { id: "list", label: `Biblioteca (${utms.length})` },
+          { id: "tracking", label: "Instalar" },
+          { id: "data", label: "Dashboard" },
+          { id: "checkout", label: "Checkout" },
+          { id: "contacts", label: "Leads" },
+          { id: "debug", label: "Debug" },
         ].map((t) => (
           <button key={t.id} onClick={() => setActiveTab(t.id as any)}
-            className="px-4 py-2 rounded-lg text-[13px] font-semibold transition-all duration-150"
+            className="px-4 py-2 rounded-lg text-[13px] font-semibold transition-all duration-150 whitespace-nowrap"
             style={{
               background: activeTab === t.id ? "var(--surface)" : "transparent",
               color: activeTab === t.id ? "var(--text-1)" : "var(--text-4)",
@@ -768,7 +810,7 @@ export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTa
         </div>
       )}
 
-      {activeTab === "data" && (
+      {["data", "checkout", "contacts", "debug"].includes(activeTab) && (
         <div className="space-y-5">
           <div className="card p-4 flex flex-col md:flex-row md:items-end gap-3">
             <div className="flex-1">
@@ -802,7 +844,7 @@ export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTa
             <span className="badge badge-green whitespace-nowrap">Ao vivo 5s</span>
           </div>
 
-          {!summary && !summaryError && (
+          {activeTab === "data" && !summary && !summaryError && (
             <div className="card p-10 text-center">
               <BarChart3 className="w-10 h-10 mx-auto mb-3" style={{ color: "var(--border-2)" }} strokeWidth={1.5} />
               <p className="text-[14px] font-bold" style={{ color: "var(--text-2)" }}>Pronto para receber visitas</p>
@@ -814,6 +856,66 @@ export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTa
             <div className="rounded-lg p-4" style={{ background: "var(--yellow-light)", border: "1px solid rgba(202,138,4,0.18)" }}>
               <p className="text-[13px] font-bold" style={{ color: "var(--text-2)" }}>O coletor ainda não está pronto</p>
               <p className="text-[12px] mt-1" style={{ color: "var(--text-3)" }}>{summaryError} Configure a chave de serviço do Supabase no backend e execute a migração de eventos uma vez.</p>
+            </div>
+          )}
+
+          {activeTab === "checkout" && !summary && (
+            <div className="card overflow-hidden">
+              <div className="px-5 py-4 border-b flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3" style={{ borderColor: "var(--border)" }}>
+                <div>
+                  <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Eventos de checkout prontos para copiar</h2>
+                  <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Use depois de instalar o script único da oferta. A compra deve disparar somente quando o pagamento estiver aprovado.</p>
+                </div>
+                <button type="button" className="btn-secondary px-3 py-2" onClick={() => handleCopy(`<button data-trackfy-bump="vitalicio" data-trackfy-value="49.90">Adicionar acesso vitalicio</button>
+<button data-trackfy-payment="pix" data-trackfy-value="67.90">Pagar com Pix</button>
+<script>
+window.trackfyPurchase({
+  transaction_id: "ID_DO_PEDIDO",
+  value: 117.80,
+  currency: "BRL",
+  name: "Nome do cliente",
+  email: "cliente@email.com",
+  phone: "11999999999"
+});
+</script>
+<button data-trackfy-post-purchase="upsell_vip" data-trackfy-value="97">Quero o upsell VIP</button>`, "checkout-events-empty")}>
+                  {copied === "checkout-events-empty" ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                  {copied === "checkout-events-empty" ? "Copiado" : "Copiar eventos"}
+                </button>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
+                <pre className="p-5 overflow-auto text-[11px] leading-relaxed" style={{ background: "#0f172a", color: "#dbeafe" }}><code>{`<!-- Bump aceito -->
+<button data-trackfy-bump="vitalicio" data-trackfy-value="49.90">
+  Adicionar acesso vitalicio
+</button>
+
+<!-- Pagamento escolhido -->
+<button data-trackfy-payment="pix" data-trackfy-value="117.80">
+  Pagar com Pix
+</button>
+
+<!-- Pos-venda / upsell -->
+<button data-trackfy-post-purchase="upsell_vip" data-trackfy-value="97">
+  Quero o upsell VIP
+</button>`}</code></pre>
+                <pre className="p-5 overflow-auto text-[11px] leading-relaxed border-t lg:border-t-0 lg:border-l" style={{ background: "var(--bg-subtle)", color: "var(--text-2)", borderColor: "var(--border)" }}><code>{`// Dispare somente apos pagamento aprovado:
+window.trackfyPurchase({
+  transaction_id: "ID_DO_PEDIDO",
+  value: 117.80,
+  currency: "BRL",
+  name: "Nome do cliente",
+  email: "cliente@email.com",
+  phone: "11999999999"
+});`}</code></pre>
+              </div>
+            </div>
+          )}
+
+          {(activeTab === "contacts" || activeTab === "debug") && !summary && (
+            <div className="card p-8 text-center">
+              <Database className="w-9 h-9 mx-auto mb-3" style={{ color: "var(--border-2)" }} strokeWidth={1.5} />
+              <p className="text-[14px] font-bold" style={{ color: "var(--text-2)" }}>{activeTab === "contacts" ? "Leads e compradores aparecem aqui" : "Debug aparece depois do primeiro evento"}</p>
+              <p className="text-[13px] mt-1 max-w-md mx-auto" style={{ color: "var(--text-4)" }}>Assim que o Trackfy receber dados desta oferta, esta aba carrega automaticamente. Você também pode clicar em Atualizar dados.</p>
             </div>
           )}
 
@@ -880,6 +982,7 @@ export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTa
                 ))}
               </div>
 
+              {activeTab === "checkout" && (
               <div className="card overflow-hidden">
                 <div className="px-5 py-4 border-b flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3" style={{ borderColor: "var(--border)" }}>
                   <div>
@@ -934,7 +1037,9 @@ window.trackfyPayment({ method: "pix", value: 117.80 });
 window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                 </div>
               </div>
+              )}
 
+              {activeTab === "data" && (
               <div className="card overflow-hidden">
                 <div className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 border-b" style={{ borderColor: "var(--border)" }}>
                   <div>
@@ -978,7 +1083,9 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   </table>
                 </div>
               </div>
+              )}
 
+              {activeTab === "contacts" && (
               <div className="card overflow-hidden">
                 <div className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 border-b" style={{ borderColor: "var(--border)" }}>
                   <div>
@@ -1026,7 +1133,9 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   </table>
                 </div>
               </div>
+              )}
 
+              {activeTab === "debug" && (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
                 {[
                   { label: "Visitantes únicos", value: visitorCount, detail: "Mesmo navegador conta uma vez", tone: "var(--blue)" },
@@ -1045,7 +1154,9 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   </div>
                 ))}
               </div>
+              )}
 
+              {activeTab === "debug" && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="lg:col-span-2 card p-5">
                   <div className="flex items-center justify-between gap-3 mb-4">
@@ -1105,7 +1216,9 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   </div>
                 </div>
               </div>
+              )}
 
+              {activeTab === "debug" && (
               <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-4">
                 <div className="card p-5">
                   <div className="flex items-center justify-between gap-3 mb-5">
@@ -1155,7 +1268,9 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   </div>
                 </div>
               </div>
+              )}
 
+              {activeTab === "debug" && (
               <div className="card p-5">
                 <div className="flex items-center justify-between gap-3 mb-5">
                   <div>
@@ -1186,6 +1301,7 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   })}
                 </div>
               </div>
+              )}
 
               <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4">
                 <div className="card p-5">
@@ -1231,6 +1347,7 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                 </div>
               </div>
 
+              {activeTab === "debug" && (
               <div className="card overflow-hidden">
                 <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
                   <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Saúde do tracking</h2>
@@ -1252,6 +1369,8 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   })}
                 </div>
               </div>
+              )}
+              {activeTab === "debug" && (
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                 {[
                   { label: "Sessões", value: summary.totals.visits, detail: "pessoas/sessões únicas" },
@@ -1267,6 +1386,8 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   </div>
                 ))}
               </div>
+              )}
+              {activeTab === "debug" && (
               <div className="card overflow-hidden">
                 <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
                   <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Funil por fonte de dados</h2>
@@ -1290,6 +1411,8 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   </table>
                 </div>
               </div>
+              )}
+              {activeTab === "debug" && (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <div className="card overflow-hidden">
                   <div className="px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
@@ -1323,6 +1446,7 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   </div>
                 </div>
               </div>
+              )}
               <div className="card overflow-hidden">
                 <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: "var(--border)" }}>
                   <div><h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Atividade recente</h2><p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Atualiza a cada 5 segundos enquanto esta aba estiver aberta.</p></div>
@@ -1337,6 +1461,7 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   ))}
                 </div>
               </div>
+              {activeTab === "debug" && (
               <div className="card p-5 border" style={{ borderColor: "rgba(220,38,38,0.18)", background: "rgba(254,242,242,0.55)" }}>
                 <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(220,38,38,0.1)" }}>
@@ -1353,6 +1478,7 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   </button>
                 </div>
               </div>
+              )}
             </>
           )}
         </div>
