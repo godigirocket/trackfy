@@ -145,7 +145,7 @@ type TrackingSummary = {
 
 type UTMTab = "create" | "list" | "tracking" | "data" | "checkout" | "contacts" | "debug";
 
-export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTab } = {}) {
+export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab } = {}) {
   const [utms, setUTMs]   = useState<UTMEntry[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -176,9 +176,7 @@ export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTa
       const first: TrackingSite = { id: crypto.randomUUID(), name: "Oferta principal", websiteUrl: "", measurementId: "", metaPixelId: "", siteId: crypto.randomUUID(), endpoint: fallbackEndpoint, installed: false };
       setSites([first]); setTracker(first); setSitesReady(true);
     }
-  }, []);
-
-  useEffect(() => {
+  }, []);  useEffect(() => {
     if (!tracker.siteId) return;
     let cancelled = false;
     const syncUTMs = async () => {
@@ -187,19 +185,46 @@ export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTa
         const response = await fetch(`/api/utms?siteId=${encodeURIComponent(tracker.siteId)}`, { cache: "no-store" });
         const result = await response.json();
         if (cancelled) return;
+        
         const remote = Array.isArray(result.utms) ? dedupeUTMs(result.utms as UTMEntry[]) : [];
-        if (remote.length) { setUTMs(remote); saveUTMs(remote); return; }
-        const local = loadUTMs().filter((item) => !item.siteId || item.siteId === tracker.siteId);
-        setUTMs(dedupeUTMs(local));
-        await Promise.all(local.map((item) => fetch("/api/utms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...item, siteId: tracker.siteId }) })));
-      } catch { if (!cancelled) setUTMs(loadUTMs().filter((item) => !item.siteId || item.siteId === tracker.siteId)); }
-      finally { if (!cancelled) setUtmsSyncing(false); }
+        const local = loadUTMs();
+        
+        // Identifica UTMs locais do siteId ativo que não estão no banco (com base em full ou full_url)
+        const localSiteUtms = local.filter((item) => !item.siteId || item.siteId === tracker.siteId);
+        const toUpload = localSiteUtms.filter((l) => !remote.some((r) => r.full === l.full));
+        
+        // Upload para o banco de dados remoto
+        if (toUpload.length > 0) {
+          await Promise.all(
+            toUpload.map((item) =>
+              fetch("/api/utms", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ...item, siteId: tracker.siteId }),
+              }).catch(() => null)
+            )
+          );
+        }
+        
+        // Agora mescla tudo
+        const merged = dedupeUTMs([...local.filter((item) => item.siteId !== tracker.siteId), ...remote]);
+        setUTMs(merged.filter((item) => !item.siteId || item.siteId === tracker.siteId));
+        saveUTMs(merged);
+      } catch (err) {
+        console.error("Erro na sincronização de UTMs:", err);
+        if (!cancelled) {
+          setUTMs(loadUTMs().filter((item) => !item.siteId || item.siteId === tracker.siteId));
+        }
+      } finally {
+        if (!cancelled) setUtmsSyncing(false);
+      }
     };
     syncUTMs();
     return () => { cancelled = true; };
   }, [tracker.siteId]);
+
   useEffect(() => {
-    if (!sitesReady || !tracker.siteId) return;
+    if (!tracker.siteId) return;
     localStorage.setItem(TRACKER_KEY, JSON.stringify(tracker));
     setSites((current) => {
       const next = current.map((site) => site.id === tracker.id ? tracker : site);
@@ -237,13 +262,12 @@ export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTa
   };
 
   useEffect(() => {
-    if (!["data", "checkout", "contacts", "debug"].includes(activeTab) || !tracker.siteId) return;
+    if (!tracker.siteId) return;
     loadSummary();
-    const timer = window.setInterval(loadSummary, 5000);
+    const timer = window.setInterval(loadSummary, 8000);
     return () => window.clearInterval(timer);
-  // Atualiza o painel enquanto a aba está aberta, sem exigir GA4.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, tracker.siteId, rangeDays]);
+  }, [tracker.siteId, rangeDays]);
 
   const handleSave = async () => {
     if (!form.url || !form.source || !form.medium || !form.campaign) return;
@@ -621,15 +645,31 @@ export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTa
 
       {activeTab === "list" && (
         <div className="space-y-4">
-          {/* Search */}
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-4)" }} strokeWidth={2.5} />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por campanha ou source..."
-                className="input pl-9" />
+          {/* Search & Actions */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3 flex-1 min-w-[250px]">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "var(--text-4)" }} strokeWidth={2.5} />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por campanha ou source..."
+                  className="input pl-9" />
+              </div>
+              <span style={{ fontSize: 13, color: "var(--text-4)" }}>{filtered.length} resultado{filtered.length !== 1 ? "s" : ""}</span>
             </div>
-            <span style={{ fontSize: 13, color: "var(--text-4)" }}>{filtered.length} resultado{filtered.length !== 1 ? "s" : ""}</span>
+            
+            <button onClick={loadSummary} disabled={summaryLoading}
+              className="btn-secondary px-3 py-1.5 text-[12px] flex items-center gap-1.5"
+              title="Atualizar estatísticas de tráfego">
+              <RefreshCw className={cn("w-3.5 h-3.5", summaryLoading && "animate-spin")} />
+              {summaryLoading ? "Atualizando..." : "Sincronizar Métricas"}
+            </button>
           </div>
+
+          {utmsSyncing && (
+            <div className="p-2.5 rounded-lg border text-[12px] flex items-center gap-2" style={{ background: "var(--blue-light)", borderColor: "rgba(37,99,235,0.15)", color: "var(--blue)" }}>
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <span>Sincronizando UTMs locais com a base de dados do site...</span>
+            </div>
+          )}
 
           {filtered.length === 0 ? (
             <div className="card p-16 text-center">
@@ -647,42 +687,102 @@ export default function UTMsPage({ initialTab = "create" }: { initialTab?: UTMTa
               )}
             </div>
           ) : (
-            <div className="space-y-2">
-              {filtered.map((u) => (
-                <div key={u.id} className="card p-4 hover:shadow-md transition-all duration-150">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                        <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)" }}>{u.campaign}</span>
-                        <span className="badge badge-blue">{u.source}</span>
-                        <span className="badge badge-neutral">{u.medium}</span>
-                        {u.term && <span className="badge" style={{ background: "var(--yellow-light)", color: "var(--yellow)" }}>{u.term}</span>}
-                        {u.content && <span className="badge" style={{ background: "#fdf4ff", color: "#9333ea" }}>{u.content}</span>}
+            <div className="space-y-2.5">
+              {filtered.map((u) => {
+                // Procura métricas consolidadas dessa UTM no dashboard em tempo real
+                const stats = summary?.campaigns?.find(
+                  (c) =>
+                    c.campaign.toLowerCase() === u.campaign.toLowerCase() &&
+                    c.source.toLowerCase() === u.source.toLowerCase()
+                );
+                
+                const clicks = stats?.visits ?? 0;
+                const leads = stats?.leads ?? 0;
+                const checkouts = stats?.checkouts ?? 0;
+                const purchases = stats?.purchases ?? 0;
+                const revenue = stats?.revenue ?? 0;
+
+                return (
+                  <div key={u.id} className="card p-4 hover:shadow-md transition-all duration-150 border hover:border-slate-300">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                      
+                      {/* Left: Metadata and link info */}
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)" }}>{u.campaign}</span>
+                          <span className="badge badge-blue text-[10px]">{u.source}</span>
+                          <span className="badge badge-neutral text-[10px]">{u.medium}</span>
+                          {u.term && <span className="badge text-[10px]" style={{ background: "var(--yellow-light)", color: "var(--yellow)" }}>{u.term}</span>}
+                          {u.content && <span className="badge text-[10px]" style={{ background: "#fdf4ff", color: "#9333ea" }}>{u.content}</span>}
+                        </div>
+                        
+                        <p className="text-[11px] font-semibold text-slate-700 truncate">🔗 {u.url}</p>
+                        <p className="font-mono text-[10px] text-slate-400 truncate" title={u.full}>{u.full}</p>
+                        
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                          <span>📅 Criado em {u.createdAt}</span>
+                        </div>
                       </div>
-                      <p className="font-mono text-[11px] truncate" style={{ color: "var(--text-4)" }}>{u.full}</p>
-                      <p style={{ fontSize: 11, color: "var(--text-4)", marginTop: 4 }}>Criado em {u.createdAt}</p>
+
+                      {/* Right: Actions */}
+                      <div className="flex items-center gap-1 shrink-0 self-end md:self-start">
+                        <button onClick={() => handleCopy(u.full, u.id)}
+                          className="btn-icon w-8 h-8" title="Copiar URL completa">
+                          {copied === u.id
+                            ? <Check className="w-3.5 h-3.5 text-green-500" strokeWidth={2.5} />
+                            : <Copy className="w-3.5 h-3.5" strokeWidth={2} />}
+                        </button>
+                        <a href={u.full} target="_blank" rel="noopener noreferrer"
+                          className="btn-icon w-8 h-8" title="Abrir URL no navegador">
+                          <ExternalLink className="w-3.5 h-3.5" strokeWidth={2} />
+                        </a>
+                        <button onClick={() => handleDelete(u.id)}
+                          className="btn-icon w-8 h-8 hover:text-red-500" title="Excluir link"
+                          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = "")}>
+                          <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => handleCopy(u.full, u.id)}
-                        className="btn-icon w-8 h-8" title="Copiar URL">
-                        {copied === u.id
-                          ? <Check className="w-3.5 h-3.5 text-green-500" strokeWidth={2.5} />
-                          : <Copy className="w-3.5 h-3.5" strokeWidth={2} />}
-                      </button>
-                      <a href={u.full} target="_blank" rel="noopener noreferrer"
-                        className="btn-icon w-8 h-8" title="Abrir URL">
-                        <ExternalLink className="w-3.5 h-3.5" strokeWidth={2} />
-                      </a>
-                      <button onClick={() => handleDelete(u.id)}
-                        className="btn-icon w-8 h-8" title="Excluir"
-                        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-4)")}>
-                        <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
-                      </button>
+
+                    {/* Bottom: Realtime metrics bar */}
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px]">
+                      <div className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider mr-1">Estatísticas do Rastreio:</div>
+                      
+                      <div className="flex items-center gap-1" title="Acessos/Sessões detectadas do link">
+                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                        <span className="font-bold text-slate-700">{clicks}</span>
+                        <span className="text-slate-400">visitas</span>
+                      </div>
+
+                      <div className="flex items-center gap-1" title="Leads gerados">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span className="font-bold text-slate-700">{leads}</span>
+                        <span className="text-slate-400">leads</span>
+                      </div>
+
+                      <div className="flex items-center gap-1" title="Inícios de checkout">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                        <span className="font-bold text-slate-700">{checkouts}</span>
+                        <span className="text-slate-400">checkouts</span>
+                      </div>
+
+                      <div className="flex items-center gap-1" title="Vendas aprovadas">
+                        <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                        <span className="font-bold text-slate-700">{purchases}</span>
+                        <span className="text-slate-400">vendas</span>
+                      </div>
+
+                      {revenue > 0 && (
+                        <div className="ml-auto bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded text-[11px] border border-emerald-200">
+                          Faturamento: {revenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                        </div>
+                      )}
                     </div>
+
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
