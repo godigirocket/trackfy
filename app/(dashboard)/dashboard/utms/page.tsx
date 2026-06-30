@@ -492,6 +492,19 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
   };
   const activeMeta = tabMeta[activeTab];
   const rangeLabel = rangeFilter === "today" ? "hoje" : rangeFilter === "yesterday" ? "ontem" : `últimos ${rangeDays === 1 ? "1 dia" : `${rangeDays} dias`}`;
+  const cockpitMetrics = [
+    { label: "Receita", value: revenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }), accent: "#22c55e", hint: `${paidOrders} pedido${paidOrders === 1 ? "" : "s"} pago${paidOrders === 1 ? "" : "s"}` },
+    { label: "Leads", value: savedLeads || summary?.totals.leads || 0, accent: "#38bdf8", hint: "contatos capturados" },
+    { label: "Checkouts", value: summary?.totals.checkouts ?? 0, accent: "#f59e0b", hint: "intenções de compra" },
+    { label: "Compras", value: summary?.totals.purchases ?? 0, accent: "#a855f7", hint: `${funnelRates.checkoutToPurchase.toFixed(1)}% checkout > compra` },
+  ];
+  const funnel3D = [
+    { label: "Visitas", value: summary?.totals.visits ?? 0, width: 100, color: "#2563eb", detail: `${visitorCount} visitantes` },
+    { label: "Leads", value: summary?.totals.leads ?? savedLeads, width: Math.max(18, funnelRates.visitToLead || 0), color: "#06b6d4", detail: `${funnelRates.visitToLead.toFixed(1)}% das sessões` },
+    { label: "Checkout", value: summary?.totals.checkouts ?? 0, width: Math.max(14, funnelRates.visitToCheckout || 0), color: "#f59e0b", detail: `${funnelRates.visitToCheckout.toFixed(1)}% chegaram` },
+    { label: "Pagamento", value: paymentSelections || paymentCount, width: summary?.totals.visits ? Math.max(12, ((paymentSelections || paymentCount) / summary.totals.visits) * 100) : 12, color: "#fb7185", detail: "Pix/cartão selecionado" },
+    { label: "Compra", value: summary?.totals.purchases ?? 0, width: Math.max(10, funnelRates.visitToPurchase || 0), color: "#22c55e", detail: revenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) },
+  ];
   const setupItems = [
     { label: "Oferta", ok: Boolean(tracker.name && tracker.siteId), detail: tracker.name || "Sem nome" },
     { label: "Domínio", ok: Boolean(tracker.websiteUrl), detail: tracker.websiteUrl || "Cadastre na aba Instalar" },
@@ -1213,6 +1226,55 @@ window.trackfyPurchase({
                     <p className="text-[11px] mt-1" style={{ color: "var(--text-4)" }}>{item.detail}</p>
                   </div>
                 ))}
+              </div>
+
+              <div className="trackfy-cockpit">
+                <div className="trackfy-cockpit__header">
+                  <div>
+                    <p className="trackfy-cockpit__eyebrow">Rastreamento unificado</p>
+                    <h2>Funil vivo da oferta</h2>
+                    <p>UTMs, visitas, leads, checkout, pagamento e compras no mesmo painel — sem ficar pulando de aba.</p>
+                  </div>
+                  <div className="trackfy-cockpit__live">
+                    <span />
+                    Ao vivo · {rangeLabel}
+                  </div>
+                </div>
+
+                <div className="trackfy-cockpit__grid">
+                  <div className="trackfy-funnel3d" aria-label="Funil visual de conversão">
+                    {funnel3D.map((step, index) => (
+                      <div key={step.label} className="trackfy-funnel3d__row" style={{ ["--stage-width" as string]: `${Math.min(100, step.width)}%`, ["--stage-color" as string]: step.color }}>
+                        <div className="trackfy-funnel3d__label">
+                          <span>{String(index + 1).padStart(2, "0")}</span>
+                          <strong>{step.label}</strong>
+                        </div>
+                        <div className="trackfy-funnel3d__stage">
+                          <div className="trackfy-funnel3d__bar">
+                            <b>{step.value}</b>
+                            <small>{step.detail}</small>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="trackfy-cockpit__side">
+                    <div className="trackfy-cockpit__metrics">
+                      {cockpitMetrics.map((metric) => (
+                        <div key={metric.label} className="trackfy-cockpit__metric" style={{ ["--metric-accent" as string]: metric.accent }}>
+                          <span>{metric.label}</span>
+                          <strong>{metric.value}</strong>
+                          <small>{metric.hint}</small>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="trackfy-cockpit__next">
+                      <p>Próxima decisão</p>
+                      <strong>{summary.totals.visits === 0 ? "Instale o script e gere a primeira visita." : checkoutGap > 0 ? "Há checkout sem compra: confira evento de pagamento aprovado." : revenue > 0 ? "Oferta vendendo: compare campanhas por receita antes de escalar." : "Tráfego recebido: marque leads e checkout para enxergar gargalos."}</strong>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {activeTab === "checkout" && (
