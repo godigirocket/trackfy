@@ -5,6 +5,7 @@ import {
   LayoutDashboard, FileText,
   Tag, Zap, Percent, Receipt, BarChart2, Settings, User,
   LogOut, Bell, Image, ChevronRight, Crown, Wrench, PanelLeftClose, PanelLeftOpen, Target, Lightbulb, Radar, BadgeDollarSign,
+  Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandIcon } from "@/components/shared/BrandIcon";
@@ -44,6 +45,7 @@ const nav = [
   {
     group: "Ferramentas",
     items: [
+      { href: "/dashboard/video-engine", label: "Video Engine", icon: Video },
       { href: "/dashboard/utms",       label: "UTMs",       icon: Tag },
       { href: "/dashboard/rastreamento", label: "Rastreamento", icon: BarChart2 },
       { href: "/dashboard/rules",      label: "Regras",     icon: Zap },
