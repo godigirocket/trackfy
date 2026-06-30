@@ -181,44 +181,19 @@ export default function VideoEnginePage() {
     const userVideo = files.find(f => f.type === 'video');
     const userAudio = files.find(f => f.type === 'audio');
 
-    const videoSrc = userVideo?.url || (selectedFormat === "feed" 
-      ? "https://assets.mixkit.co/videos/preview/mixkit-business-woman-using-a-tablet-41225-large.mp4" 
-      : "https://assets.mixkit.co/videos/preview/mixkit-hand-holding-smartphone-with-green-screen-39744-large.mp4");
-
     const audioSrc = userAudio?.url || MUSIC_TRACKS.find(m => m.id === selectedMusicTrack)?.url || MUSIC_TRACKS[0].url;
+
+    // Fixed render duration: 12s for Reels, 10s for feed/landscape
+    const RENDER_DURATION_S = selectedFormat === "reels" ? 12 : 10;
 
     setRendering(true);
     setRenderProgress(0);
     setActiveTab("builder");
 
-    const video = document.createElement("video");
-    video.src = videoSrc;
-    video.crossOrigin = "anonymous";
-    video.muted = true;
-    video.playsInline = true;
-
-    const audio = document.createElement("audio");
-    audio.src = audioSrc;
-    audio.crossOrigin = "anonymous";
-    audio.loop = true;
-
-    // Force loading metadata
-    await new Promise((resolve) => {
-      video.onloadedmetadata = () => resolve(true);
-      video.onerror = () => resolve(false);
-      // Fallback timeout
-      setTimeout(() => resolve(false), 2000);
-    });
-
-    let width = 540;
-    let height = 960;
-    if (selectedFormat === "feed") {
-      width = 540;
-      height = 540;
-    } else if (selectedFormat === "landscape") {
-      width = 960;
-      height = 540;
-    }
+    // Dimensions per format
+    let width = 540, height = 960;
+    if (selectedFormat === "feed") { width = 540; height = 540; }
+    else if (selectedFormat === "landscape") { width = 960; height = 540; }
 
     const canvas = document.createElement("canvas");
     canvas.width = width;
@@ -230,222 +205,231 @@ export default function VideoEnginePage() {
       return;
     }
 
+    // Try to load user's own video (blob URL — no CORS)
+    let videoEl: HTMLVideoElement | null = null;
+    let videoReady = false;
+    if (userVideo?.url) {
+      videoEl = document.createElement("video");
+      videoEl.src = userVideo.url;
+      videoEl.muted = true;
+      videoEl.playsInline = true;
+      videoEl.loop = true;
+      videoReady = await new Promise<boolean>((resolve) => {
+        videoEl!.oncanplay = () => resolve(true);
+        videoEl!.onerror = () => resolve(false);
+        setTimeout(() => resolve(false), 3000);
+        videoEl!.load();
+      });
+      if (videoReady) videoEl.play().catch(() => {});
+    }
+
+    // Try to play background music
     let audioCtx: AudioContext | null = null;
     let audioDest: MediaStreamAudioDestinationNode | null = null;
-
+    const audioEl = document.createElement("audio");
+    audioEl.src = audioSrc;
+    audioEl.crossOrigin = "anonymous";
+    audioEl.loop = true;
     try {
       const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
       audioCtx = new AudioCtxClass();
-      const videoSource = audioCtx.createMediaElementSource(video);
-      const audioSource = audioCtx.createMediaElementSource(audio);
-      const videoGain = audioCtx.createGain();
+      const audioSource = audioCtx.createMediaElementSource(audioEl);
       const audioGain = audioCtx.createGain();
-
-      videoGain.gain.value = 0.8;
       audioGain.gain.value = musicVolume / 100;
-
       audioDest = audioCtx.createMediaStreamDestination();
-      videoSource.connect(videoGain).connect(audioDest);
       audioSource.connect(audioGain).connect(audioDest);
+      if (audioCtx.state === "suspended") await audioCtx.resume();
+      audioEl.play().catch(() => {});
     } catch (err) {
       console.warn("AudioContext setup failed:", err);
     }
 
+    // Set up MediaRecorder
     const canvasStream = canvas.captureStream(30);
-    const tracks = [...canvasStream.getVideoTracks()];
-    if (audioDest) {
-      tracks.push(...audioDest.stream.getAudioTracks());
-    }
-    const recordStream = new MediaStream(tracks);
+    const streamTracks = [...canvasStream.getVideoTracks()];
+    if (audioDest) streamTracks.push(...audioDest.stream.getAudioTracks());
+    const recordStream = new MediaStream(streamTracks);
 
-    let recorder: MediaRecorder;
+    let mimeType = "";
+    for (const m of ["video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm","video/mp4",""]) {
+      if (!m || MediaRecorder.isTypeSupported(m)) { mimeType = m; break; }
+    }
+
     const recordedChunks: Blob[] = [];
-
-    let options = { mimeType: 'video/webm;codecs=vp9,opus' };
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options = { mimeType: 'video/webm;codecs=vp8,opus' };
-    }
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options = { mimeType: 'video/webm' };
-    }
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options = { mimeType: 'video/mp4' };
-    }
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options = { mimeType: '' };
-    }
-
+    let recorder: MediaRecorder;
     try {
-      recorder = new MediaRecorder(recordStream, options);
+      recorder = new MediaRecorder(recordStream, mimeType ? { mimeType } : {});
     } catch (err) {
-      console.error("Failed to create MediaRecorder:", err);
       alert("Seu navegador não suporta gravação de vídeo.");
       setRendering(false);
       return;
     }
 
-    recorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) {
-        recordedChunks.push(event.data);
-      }
-    };
-
-    const drawWrappedText = (
-      text: string,
-      x: number,
-      y: number,
-      maxWidth: number,
-      lineHeight: number,
-      textColor: string,
-      boxColor: string
-    ) => {
-      const words = text.split(" ");
-      let line = "";
-      const lines: string[] = [];
-
-      ctx.font = "bold 24px sans-serif";
-      for (let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + " ";
-        const metrics = ctx.measureText(testLine);
-        const testWidth = metrics.width;
-        if (testWidth > maxWidth && n > 0) {
-          lines.push(line);
-          line = words[n] + " ";
-        } else {
-          line = testLine;
-        }
-      }
-      lines.push(line);
-
-      const boxHeight = lines.length * lineHeight + 20;
-      const boxWidth = Math.min(maxWidth + 40, width - 40);
-      ctx.fillStyle = boxColor;
-      ctx.beginPath();
-      if (ctx.roundRect) {
-        ctx.roundRect(x - boxWidth / 2, y - boxHeight / 2 - 5, boxWidth, boxHeight, 12);
-      } else {
-        ctx.rect(x - boxWidth / 2, y - boxHeight / 2 - 5, boxWidth, boxHeight);
-      }
-      ctx.fill();
-
-      ctx.fillStyle = textColor;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      let startY = y - ((lines.length - 1) * lineHeight) / 2;
-      for (let i = 0; i < lines.length; i++) {
-        ctx.fillText(lines[i].trim(), x, startY + i * lineHeight);
-      }
-    };
-
-    let animationFrameId: number;
-    let isDrawing = true;
-    let gradOffset = 0;
-
-    const drawFrame = () => {
-      if (!isDrawing) return;
-
-      try {
-        ctx.drawImage(video, 0, 0, width, height);
-      } catch (err) {
-        const grad = ctx.createLinearGradient(0, 0, width, height);
-        gradOffset += 0.01;
-        const color1 = `hsl(${(gradOffset * 360) % 360}, 70%, 20%)`;
-        const color2 = `hsl(${(gradOffset * 360 + 120) % 360}, 70%, 15%)`;
-        const color3 = `hsl(${(gradOffset * 360 + 240) % 360}, 70%, 10%)`;
-        grad.addColorStop(0, color1);
-        grad.addColorStop(0.5, color2);
-        grad.addColorStop(1, color3);
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, width, height);
-      }
-
-      const currentTime = video.currentTime;
-      const duration = video.duration || 10;
-      const progressPercent = Math.min(Math.round((currentTime / duration) * 100), 99);
-      setRenderProgress(progressPercent);
-
-      if (currentTime < 3) {
-        drawWrappedText(
-          selectedHook,
-          width / 2,
-          height * 0.35,
-          width - 80,
-          32,
-          "#FFFFFF",
-          "rgba(0, 0, 0, 0.75)"
-        );
-      }
-
-      if (duration - currentTime <= 4) {
-        drawWrappedText(
-          selectedCta,
-          width / 2,
-          height * 0.75,
-          width - 80,
-          32,
-          "#FFFFFF",
-          "rgba(37, 99, 235, 0.9)"
-        );
-      }
-
-      animationFrameId = requestAnimationFrame(drawFrame);
-    };
+    recorder.ondataavailable = (ev) => { if (ev.data?.size > 0) recordedChunks.push(ev.data); };
 
     recorder.onstop = () => {
       isDrawing = false;
-      cancelAnimationFrame(animationFrameId);
+      cancelAnimationFrame(rafId);
+      audioEl.pause();
+      if (videoEl) videoEl.pause();
+      if (audioCtx) audioCtx.close().catch(() => {});
 
-      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const blob = new Blob(recordedChunks, { type: mimeType || "video/webm" });
       const outputUrl = URL.createObjectURL(blob);
-
       const newVideo = {
         id: "vid-" + Date.now(),
-        name: `${selectedPreset ? PRESETS.find(p => p.id === selectedPreset)?.name : "Vídeo"} - Variação ${Math.floor(Math.random() * 100)}`,
+        name: `${PRESETS.find(p => p.id === selectedPreset)?.name || "Vídeo"} - Variação ${Math.floor(Math.random() * 100)}`,
         date: new Date().toISOString().split("T")[0],
         format: selectedFormat === "reels" ? "9:16 (Reels)" : selectedFormat === "feed" ? "1:1 (Feed)" : "16:9 (Landscape)",
         preset: PRESETS.find(p => p.id === selectedPreset)?.name || "Personalizado",
         status: "Renderizado",
-        prompt: prompt,
+        prompt,
         hook: selectedHook,
         cta: selectedCta,
-        videoUrl: outputUrl
+        videoUrl: outputUrl,
       };
-
       saveHistory([newVideo, ...history]);
       setActivePreviewUrl(outputUrl);
       setPlayingPreview(true);
       setRenderProgress(100);
       setRendering(false);
+    };
 
-      video.pause();
-      audio.pause();
-      if (audioCtx) {
-        audioCtx.close().catch(() => {});
+    // Gradient palette per preset
+    const PRESET_COLORS: Record<string, [string, string, string]> = {
+      "site-prof":    ["#0f2044", "#1a3a6e", "#0a1628"],
+      "agencia-mkt":  ["#1a0533", "#3d0f6e", "#0d0219"],
+      "infoproduto":  ["#0a2a1a", "#0f4d2e", "#061510"],
+      "loja-online":  ["#2a0a0a", "#6e1414", "#150505"],
+      "prest-servico":["#1a1a0a", "#4d4a0f", "#0d0d05"],
+      "consultoria":  ["#0a0a2a", "#12126e", "#05050f"],
+      "plano-saude":  ["#0a1f2a", "#0f4060", "#060f14"],
+      "prod-digital": ["#0a0a1f", "#1a0a40", "#050510"],
+    };
+    const [c1, c2, c3] = PRESET_COLORS[selectedPreset] || ["#0a0a14", "#12183a", "#050510"];
+
+    const drawWrappedText = (text: string, x: number, y: number, maxWidth: number, lineH: number, fg: string, bg: string) => {
+      ctx.font = `bold ${Math.round(width * 0.046)}px sans-serif`;
+      const words = text.split(" ");
+      let line = "", lines: string[] = [];
+      for (const w of words) {
+        const test = line + w + " ";
+        if (ctx.measureText(test).width > maxWidth && line) { lines.push(line.trim()); line = w + " "; }
+        else line = test;
+      }
+      if (line.trim()) lines.push(line.trim());
+
+      const bh = lines.length * lineH + 28;
+      const bw = Math.min(maxWidth + 60, width - 30);
+      const bx = x - bw / 2, by = y - bh / 2;
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(bx, by, bw, bh, 14) : ctx.rect(bx, by, bw, bh);
+      ctx.fill();
+
+      ctx.fillStyle = fg;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const startY = y - ((lines.length - 1) * lineH) / 2;
+      lines.forEach((l, i) => ctx.fillText(l, x, startY + i * lineH));
+    };
+
+    // Timer-based rendering
+    const startTime = performance.now();
+    let isDrawing = true;
+    let rafId: number;
+    let hue = 0;
+
+    const drawFrame = () => {
+      if (!isDrawing) return;
+      const ctx2d = ctx!; // ctx is guaranteed non-null at this point
+      const elapsed = (performance.now() - startTime) / 1000;
+      const progress = Math.min(elapsed / RENDER_DURATION_S, 1);
+      setRenderProgress(Math.round(progress * 99));
+
+      // Draw background
+      if (videoEl && videoReady) {
+        try {
+          ctx2d.drawImage(videoEl, 0, 0, width, height);
+          ctx2d.fillStyle = "rgba(0,0,0,0.35)";
+          ctx2d.fillRect(0, 0, width, height);
+        } catch {
+          drawGradientBg();
+        }
+      } else {
+        drawGradientBg();
+      }
+
+      function drawGradientBg() {
+        hue = (hue + 0.3) % 360;
+        const grad = ctx2d.createRadialGradient(width / 2, height * 0.4, 0, width / 2, height / 2, width);
+        grad.addColorStop(0, c2);
+        grad.addColorStop(0.6, c1);
+        grad.addColorStop(1, c3);
+        ctx2d.fillStyle = grad;
+        ctx2d.fillRect(0, 0, width, height);
+
+        // Animated particles
+        for (let i = 0; i < 6; i++) {
+          const px = (Math.sin(elapsed * 0.5 + i * 1.1) * 0.5 + 0.5) * width;
+          const py = (Math.cos(elapsed * 0.3 + i * 0.9) * 0.5 + 0.5) * height;
+          const gr = ctx2d.createRadialGradient(px, py, 0, px, py, width * 0.25);
+          gr.addColorStop(0, `hsla(${(hue + i * 40) % 360}, 80%, 60%, 0.08)`);
+          gr.addColorStop(1, "transparent");
+          ctx2d.fillStyle = gr;
+          ctx2d.fillRect(0, 0, width, height);
+        }
+      }
+
+      // Safe area overlay
+      if (safeMargins && selectedFormat === "reels") {
+        ctx2d.strokeStyle = "rgba(255,255,255,0.08)";
+        ctx2d.lineWidth = 2;
+        ctx2d.setLineDash([6, 6]);
+        ctx2d.strokeRect(20, 60, width - 40, height - 120);
+        ctx2d.setLineDash([]);
+      }
+
+      // Hook — first 40% of video
+      if (progress < 0.4) {
+        const alpha = progress < 0.07 ? progress / 0.07 : progress > 0.33 ? (0.4 - progress) / 0.07 : 1;
+        ctx2d.globalAlpha = alpha;
+        drawWrappedText(
+          selectedHook, width / 2, height * 0.35,
+          width - 80, Math.round(height * 0.038),
+          "#FFFFFF", "rgba(0,0,0,0.8)"
+        );
+        ctx2d.globalAlpha = 1;
+      }
+
+      // CTA — last 35% of video
+      if (progress > 0.65) {
+        const alpha = progress < 0.72 ? (progress - 0.65) / 0.07 : progress > 0.93 ? (1 - progress) / 0.07 : 1;
+        ctx2d.globalAlpha = Math.max(0, alpha);
+        drawWrappedText(
+          selectedCta, width / 2, height * 0.75,
+          width - 80, Math.round(height * 0.038),
+          "#FFFFFF", "rgba(37,99,235,0.92)"
+        );
+        ctx2d.globalAlpha = 1;
+      }
+
+      // Progress bar at bottom
+      const barH = 4, barY = height - barH;
+      ctx2d.fillStyle = "rgba(255,255,255,0.15)";
+      ctx2d.fillRect(0, barY, width, barH);
+      ctx2d.fillStyle = "#3b82f6";
+      ctx2d.fillRect(0, barY, width * progress, barH);
+
+      if (elapsed < RENDER_DURATION_S) {
+        rafId = requestAnimationFrame(drawFrame);
+      } else {
+        if (recorder.state !== "inactive") recorder.stop();
       }
     };
 
-    video.play().catch(err => {
-      console.warn("Failed to play video:", err);
-    });
-    audio.play().catch(err => {
-      console.warn("Failed to play audio:", err);
-    });
-
-    recorder.start();
+    recorder.start(100); // collect chunks every 100ms
     drawFrame();
-
-    video.onended = () => {
-      if (recorder.state !== "inactive") {
-        recorder.stop();
-      }
-    };
-
-    const durationMs = (video.duration || 10) * 1000;
-    setTimeout(() => {
-      if (recorder.state !== "inactive") {
-        recorder.stop();
-      }
-    }, durationMs + 2000);
   };
 
   const handleDuplicate = (video: typeof INITIAL_HISTORY[0]) => {
