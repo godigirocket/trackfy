@@ -7,6 +7,7 @@ import { MediaLibrary } from "./MediaLibrary";
 import { PreviewPlayer } from "./PreviewPlayer";
 import { Timeline } from "./Timeline";
 import { useFFmpeg } from "@/hooks/useFFmpeg";
+import { autoCutByAudio, splitIntoShorts } from "@/lib/video/autoCut";
 import { loadProject, saveProject } from "@/lib/video/indexedDb";
 import type { VideoAsset, VideoClip, VideoProject } from "@/lib/video/types";
 
@@ -42,6 +43,7 @@ export function VideoEditor() {
   const [cursor, setCursor] = useState(0);
   const [output, setOutput] = useState("");
   const [error, setError] = useState("");
+  const [autoBusy, setAutoBusy] = useState(false);
   const { load, exportProject, cancel, loading, progress, status } = useFFmpeg();
 
   const clip = project.clips.find((item) => item.id === selectedId);
@@ -82,6 +84,36 @@ export function VideoEditor() {
     const next: VideoClip = { id: crypto.randomUUID(), assetId: item.id, name: item.name, start: 0, end: item.duration };
     setProject((current) => ({ ...current, clips: [...current.clips, next] }));
     setSelectedId(next.id);
+  };
+
+  const autoCut = async () => {
+    setError("");
+    if (!assets.length) { setError("Envie pelo menos um vídeo para gerar cortes automáticos."); return; }
+    setAutoBusy(true);
+    try {
+      const generated = (await Promise.all(assets.map((item) => autoCutByAudio(item)))).flat();
+      setProject((current) => ({ ...current, clips: generated }));
+      setSelectedId(generated[0]?.id ?? "");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível gerar cortes automáticos.");
+    } finally {
+      setAutoBusy(false);
+    }
+  };
+
+  const makeShorts = () => {
+    setError("");
+    if (!assets.length) { setError("Envie pelo menos um vídeo para criar shorts."); return; }
+    const generated = assets.flatMap((item) => splitIntoShorts(item, 12));
+    setProject((current) => ({ ...current, clips: generated }));
+    setSelectedId(generated[0]?.id ?? "");
+  };
+
+  const clearTimeline = () => {
+    setProject((current) => ({ ...current, clips: [] }));
+    setSelectedId("");
+    if (output) URL.revokeObjectURL(output);
+    setOutput("");
   };
 
   const patchClip = (patch: Partial<VideoClip>) => {
@@ -153,6 +185,25 @@ export function VideoEditor() {
       <div className="card p-3 text-[12px] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <span style={{ color: "var(--text-3)" }}>{status}</span>
         <span className="badge badge-blue">{project.clips.length} corte{project.clips.length === 1 ? "" : "s"} · {duration.toFixed(1)}s</span>
+      </div>
+
+      <div className="video-action-grid">
+        <button type="button" onClick={autoCut} disabled={autoBusy || loading} className="video-action-card">
+          <strong>{autoBusy ? "Analisando áudio..." : "Auto cortar silêncios"}</strong>
+          <span>Remove partes paradas e monta a timeline automaticamente.</span>
+        </button>
+        <button type="button" onClick={makeShorts} disabled={loading} className="video-action-card">
+          <strong>Criar shorts de 12s</strong>
+          <span>Divide os vídeos em vários criativos curtos para testar.</span>
+        </button>
+        <button type="button" onClick={() => setProject((current) => ({ ...current, ratio: current.ratio === "9:16" ? "1:1" : current.ratio === "1:1" ? "16:9" : "9:16" }))} disabled={loading} className="video-action-card">
+          <strong>Trocar formato</strong>
+          <span>Alterna 9:16, 1:1 e 16:9 para redes diferentes.</span>
+        </button>
+        <button type="button" onClick={clearTimeline} disabled={loading || !project.clips.length} className="video-action-card video-action-card--danger">
+          <strong>Limpar timeline</strong>
+          <span>Recomeça os cortes sem apagar os vídeos enviados.</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_300px] gap-4">

@@ -359,6 +359,10 @@
       padding: 16px;
       border-radius: 18px;
     }
+
+    .video-action-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 
   /* Badge */
@@ -822,6 +826,55 @@
     max-width: 660px;
     color: #cbd5e1;
     font-size: 14px;
+  }
+
+  .video-action-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .video-action-card {
+    text-align: left;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 14px;
+    background:
+      radial-gradient(circle at top right, rgba(37,99,235,0.12), transparent 42%),
+      var(--surface);
+    box-shadow: var(--shadow-xs);
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .video-action-card:hover:not(:disabled) {
+    transform: translateY(-1px);
+    border-color: var(--border-2);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .video-action-card:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .video-action-card strong {
+    display: block;
+    color: var(--text-1);
+    font-size: 13px;
+  }
+
+  .video-action-card span {
+    display: block;
+    margin-top: 5px;
+    color: var(--text-4);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .video-action-card--danger {
+    background:
+      radial-gradient(circle at top right, rgba(239,68,68,0.12), transparent 42%),
+      var(--surface);
   }
 
   /* Section label */
