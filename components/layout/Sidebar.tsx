@@ -65,7 +65,7 @@ const nav = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: () => void }) {
   const pathname    = usePathname();
   const router      = useRouter();
   const { token, accountId } = useAppStore();
@@ -77,15 +77,21 @@ export function Sidebar() {
     setLocalUser(getLocalUser());
   }, []);
 
+  useEffect(() => { onClose?.(); }, [pathname]); // fecha o drawer depois da navegação
+
   const handleSignOut = async () => {
     clearLocalSession();
     await supabase.auth.signOut();
     router.push("/login");
   };
 
-  return (
+  return (<>
+    {open && <button type="button" aria-label="Fechar menu" onClick={onClose} className="fixed inset-0 z-40 bg-black/50 md:hidden" />}
     <aside
-      className="shrink-0 flex flex-col h-screen transition-all duration-200"
+      className={cn(
+        "fixed inset-y-0 left-0 z-50 shrink-0 flex flex-col h-screen transition-transform duration-200 md:relative md:z-auto md:translate-x-0",
+        open ? "translate-x-0" : "-translate-x-full"
+      )}
       style={{ width: collapsed ? 68 : 216, background: "var(--bg-subtle)", borderRight: "1px solid var(--border)" }}
     >
       {/* Logo */}
@@ -205,5 +211,6 @@ export function Sidebar() {
         </Link>
       </div>
     </aside>
+  </>
   );
 }

@@ -1,0 +1,4 @@
+"use client";
+export function ExportPanel({ loading, progress, output, onExport, onCancel }: { loading: boolean; progress: number; output: string; onExport: () => void; onCancel: () => void }) {
+  return <div className="card p-4 flex flex-col sm:flex-row gap-3 sm:items-center justify-between"><div><p className="font-bold text-sm">Exportação local</p><p className="text-xs" style={{ color: "var(--text-4)" }}>{loading ? `Processando ${progress}%` : "MP4 · nenhum vídeo é enviado ao servidor"}</p></div><div className="flex gap-2">{loading ? <button className="btn-secondary" onClick={onCancel}>Cancelar</button> : <button className="btn-primary" onClick={onExport}>Exportar vídeo</button>}{output && <a className="btn-secondary" href={output} download="trackfy-video.mp4">Baixar MP4</a>}</div></div>;
+}

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { RefreshCw, Sun, Moon, ChevronDown, Calendar, Search } from "lucide-react";
+import { RefreshCw, Sun, Moon, ChevronDown, Calendar, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -24,7 +24,7 @@ const LABELS: Record<string, string> = {
   ano: "Este ano", ano_passado: "Ano passado", max: "Máximo", custom: "Personalizado",
 };
 
-export function Topbar() {
+export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { resolvedTheme, setTheme } = useTheme();
   const { isLoading }               = useAppStore();
   const [mounted, setMounted]       = useState(false);
@@ -48,7 +48,7 @@ export function Topbar() {
 
   return (
     <header
-      className="h-[56px] shrink-0 flex items-center justify-between px-5 border-b"
+      className="h-[56px] shrink-0 flex items-center justify-between px-3 md:px-5 border-b"
       style={{
         background: "var(--overlay)",
         backdropFilter: "blur(20px) saturate(180%)",
@@ -60,7 +60,11 @@ export function Topbar() {
       }}
     >
       {/* Left — date picker */}
-      <div className="relative" ref={dropRef}>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={onMenuClick} className="btn-icon md:hidden" aria-label="Abrir menu">
+          <Menu className="w-[18px] h-[18px]" strokeWidth={2.5} />
+        </button>
+        <div className="relative hidden sm:block" ref={dropRef}>
         <button
           onClick={() => setDateOpen(!dateOpen)}
           className="flex items-center gap-2 text-[13px] font-semibold transition-all duration-150"
@@ -145,6 +149,7 @@ export function Topbar() {
             )}
           </div>
         )}
+        </div>
       </div>
 
       {/* Right */}
@@ -159,7 +164,7 @@ export function Topbar() {
         <button
           onClick={runRefresh}
           disabled={isLoading}
-          className="btn-icon"
+          className="btn-icon hidden sm:flex"
           title="Sincronizar"
         >
           <RefreshCw className={cn("w-[15px] h-[15px]", isLoading && "animate-spin")} strokeWidth={2.5} />

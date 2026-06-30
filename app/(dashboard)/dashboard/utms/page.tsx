@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Activity, AlertTriangle, BarChart3, Check, Code2, Copy, Database, ExternalLink, Link2, MousePointerClick, Plus, RefreshCw, Search, Tag, Trash2, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sourceLabel, type TrafficChannel } from "@/lib/tracking";
+import { supabase } from "@/lib/supabase";
 
 interface UTMEntry {
   id: string;
@@ -38,6 +39,27 @@ function loadUTMs(): UTMEntry[] {
   try { return dedupeUTMs(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]")); } catch { return []; }
 }
 function saveUTMs(utms: UTMEntry[]) { localStorage.setItem(STORAGE_KEY, JSON.stringify(dedupeUTMs(utms))); }
+
+async function saveUTMsRemote(userId: string, utms: UTMEntry[]) {
+  if (!utms.length) return;
+  const { error } = await supabase.from("utm_entries").upsert(
+    dedupeUTMs(utms).filter((utm) => utm.siteId).map((utm) => ({
+      id: utm.id, user_id: userId, site_id: utm.siteId, url: utm.url, full_url: utm.full,
+      source: utm.source, medium: utm.medium, campaign: utm.campaign, term: utm.term || null,
+      content: utm.content || null, clicks: utm.clicks || 0, updated_at: new Date().toISOString(),
+    })),
+    { onConflict: "id" }
+  );
+  if (error) throw error;
+}
+
+function siteRow(site: TrackingSite, userId: string, activeId: string) {
+  let domain = "";
+  try { domain = site.websiteUrl ? new URL(site.websiteUrl.startsWith("http") ? site.websiteUrl : `https://${site.websiteUrl}`).hostname : ""; } catch { /* domínio inválido */ }
+  return { id: site.siteId, user_id: userId, name: site.name, domain, url: site.websiteUrl || null,
+    is_active: site.id === activeId, measurement_id: site.measurementId || null, meta_pixel_id: site.metaPixelId || null,
+    endpoint: site.endpoint || null, installed: site.installed, updated_at: new Date().toISOString() };
+}
 
 function dedupeUTMs(utms: UTMEntry[]) {
   const seen = new Set<string>();
@@ -157,71 +179,76 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
   const [summary, setSummary] = useState<TrackingSummary | null>(null);
   const [summaryError, setSummaryError] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const [utmsSyncing, setUtmsSyncing] = useState(false);
   const [rangeDays, setRangeDays] = useState(7);
   const [resetText, setResetText] = useState("");
   const [resettingMetrics, setResettingMetrics] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<"syncing" | "synced" | "local" | "error">("syncing");
+  const [syncError, setSyncError] = useState("");
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [remoteCounts, setRemoteCounts] = useState({ sites: 0, utms: 0 });
+  const utmsSyncing = syncStatus === "syncing";
 
   useEffect(() => {
-    setUTMs(loadUTMs());
-    const fallbackEndpoint = window.location.origin;
-    try {
-      const savedSites = JSON.parse(localStorage.getItem(TRACKING_SITES_KEY) ?? "[]") as TrackingSite[];
-      const active = JSON.parse(localStorage.getItem(TRACKER_KEY) ?? "{}");
-      const legacySite: TrackingSite = { id: crypto.randomUUID(), name: active.name || "Oferta principal", websiteUrl: "", measurementId: "", metaPixelId: "", siteId: crypto.randomUUID(), endpoint: fallbackEndpoint, installed: false, ...active };
-      const nextSites = savedSites.length ? savedSites : [legacySite];
-      const selected = nextSites.find((site) => site.id === active.id) ?? nextSites[0];
-      setSites(nextSites); setTracker(selected); setSitesReady(true);
-    } catch {
-      const first: TrackingSite = { id: crypto.randomUUID(), name: "Oferta principal", websiteUrl: "", measurementId: "", metaPixelId: "", siteId: crypto.randomUUID(), endpoint: fallbackEndpoint, installed: false };
-      setSites([first]); setTracker(first); setSitesReady(true);
-    }
-  }, []);  useEffect(() => {
-    if (!tracker.siteId) return;
     let cancelled = false;
-    const syncUTMs = async () => {
-      setUtmsSyncing(true);
+    const hydrate = async () => {
+      const fallbackEndpoint = window.location.origin;
+      const localUTMs = loadUTMs();
+      let localSites: TrackingSite[] = [];
+      let active: Partial<TrackingSite> = {};
       try {
-        const response = await fetch(`/api/utms?siteId=${encodeURIComponent(tracker.siteId)}`, { cache: "no-store" });
-        const result = await response.json();
-        if (cancelled) return;
-        
-        const remote = Array.isArray(result.utms) ? dedupeUTMs(result.utms as UTMEntry[]) : [];
-        const local = loadUTMs();
-        
-        // Identifica UTMs locais do siteId ativo que não estão no banco (com base em full ou full_url)
-        const localSiteUtms = local.filter((item) => !item.siteId || item.siteId === tracker.siteId);
-        const toUpload = localSiteUtms.filter((l) => !remote.some((r) => r.full === l.full));
-        
-        // Upload para o banco de dados remoto
-        if (toUpload.length > 0) {
-          await Promise.all(
-            toUpload.map((item) =>
-              fetch("/api/utms", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ...item, siteId: tracker.siteId }),
-              }).catch(() => null)
-            )
-          );
+        localSites = JSON.parse(localStorage.getItem(TRACKING_SITES_KEY) ?? "[]") as TrackingSite[];
+        active = JSON.parse(localStorage.getItem(TRACKER_KEY) ?? "{}");
+      } catch { /* usa os valores padrão */ }
+
+      const legacySite: TrackingSite = { id: crypto.randomUUID(), name: active.name || "Oferta principal", websiteUrl: "", measurementId: "", metaPixelId: "", siteId: crypto.randomUUID(), endpoint: fallbackEndpoint, installed: false, ...active };
+      let nextSites = localSites.length ? localSites : [legacySite];
+      let nextUTMs = localUTMs;
+
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const uid = authData.user?.id;
+        if (uid) {
+          setUserId(uid);
+          const [{ data: remoteUTMRows, error: utmError }, { data: remoteSiteRows, error: siteError }] = await Promise.all([
+            supabase.from("utm_entries").select("*").eq("user_id", uid),
+            supabase.from("tracking_sites").select("*").eq("user_id", uid),
+          ]);
+          if (utmError || siteError) throw utmError || siteError;
+          const remoteUTMs = (remoteUTMRows ?? []).map((row) => ({ id: row.id, siteId: row.site_id, url: row.url, full: row.full_url,
+            source: row.source, medium: row.medium, campaign: row.campaign, term: row.term || undefined,
+            content: row.content || undefined, clicks: row.clicks, createdAt: new Date(row.created_at).toLocaleDateString("pt-BR") } as UTMEntry));
+          const remoteSites = (remoteSiteRows ?? []).map((row) => ({ id: row.id, siteId: row.id, name: row.name,
+            websiteUrl: row.url || "", measurementId: row.measurement_id || "", metaPixelId: row.meta_pixel_id || "",
+            endpoint: row.endpoint || fallbackEndpoint, installed: Boolean(row.installed) } as TrackingSite));
+          nextUTMs = dedupeUTMs([...localUTMs, ...remoteUTMs]);
+          const normalizedLocal = localSites.map((site) => ({ ...site, id: site.siteId || site.id, siteId: site.siteId || site.id }));
+          nextSites = Array.from(new Map([...normalizedLocal, ...remoteSites].map((site) => [site.id, site])).values());
+          if (!nextSites.length) nextSites = [legacySite];
+          const activeId = String((remoteSiteRows ?? []).find((row) => row.is_active)?.id || active.siteId || nextSites[0].id);
+          const { error: saveSiteError } = await supabase.from("tracking_sites").upsert(nextSites.map((site) => siteRow(site, uid, activeId)), { onConflict: "id" });
+          if (saveSiteError) throw saveSiteError;
+          nextUTMs = nextUTMs.map((utm) => ({ ...utm, siteId: utm.siteId || activeId }));
+          await saveUTMsRemote(uid, nextUTMs);
+          setRemoteCounts({ sites: nextSites.length, utms: nextUTMs.length });
+          setLastSyncedAt(new Date().toISOString()); setSyncStatus("synced");
+        } else {
+          setSyncStatus("local");
         }
-        
-        // Agora mescla tudo
-        const merged = dedupeUTMs([...local.filter((item) => item.siteId !== tracker.siteId), ...remote]);
-        setUTMs(merged.filter((item) => !item.siteId || item.siteId === tracker.siteId));
-        saveUTMs(merged);
-      } catch (err) {
-        console.error("Erro na sincronização de UTMs:", err);
-        if (!cancelled) {
-          setUTMs(loadUTMs().filter((item) => !item.siteId || item.siteId === tracker.siteId));
-        }
-      } finally {
-        if (!cancelled) setUtmsSyncing(false);
+      } catch (error) {
+        setSyncError(error instanceof Error ? error.message : "Falha ao acessar o Supabase.");
+        setSyncStatus("error");
       }
+
+      if (cancelled) return;
+      const selected = nextSites.find((site) => site.id === active.id || site.siteId === active.siteId) ?? nextSites[0];
+      saveUTMs(nextUTMs);
+      localStorage.setItem(TRACKING_SITES_KEY, JSON.stringify(nextSites));
+      setUTMs(nextUTMs); setSites(nextSites); setTracker(selected); setSitesReady(true);
     };
-    syncUTMs();
+    hydrate();
     return () => { cancelled = true; };
-  }, [tracker.siteId]);
+  }, []);
 
   useEffect(() => {
     if (!tracker.siteId) return;
@@ -229,9 +256,14 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
     setSites((current) => {
       const next = current.map((site) => site.id === tracker.id ? tracker : site);
       localStorage.setItem(TRACKING_SITES_KEY, JSON.stringify(next));
+      if (userId && sitesReady) {
+        setSyncStatus("syncing");
+        void supabase.from("tracking_sites").upsert(next.map((site) => siteRow(site, userId, tracker.id)), { onConflict: "id" })
+          .then(({ error }) => { if (error) { setSyncError(error.message); setSyncStatus("error"); } else { setSyncStatus("synced"); setLastSyncedAt(new Date().toISOString()); } });
+      }
       return next;
     });
-  }, [tracker, sitesReady]);
+  }, [tracker, sitesReady, userId]);
 
   const selectSite = (id: string) => {
     const site = sites.find((item) => item.id === id);
@@ -285,7 +317,10 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
     };
     const updated = dedupeUTMs([entry, ...utms]);
     setUTMs(updated); saveUTMs(updated);
-    try { await fetch("/api/utms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(entry) }); } catch { /* cópia local permanece disponível */ }
+    if (userId) {
+      try { setSyncStatus("syncing"); await saveUTMsRemote(userId, updated); setSyncStatus("synced"); setLastSyncedAt(new Date().toISOString()); }
+      catch (error) { setSyncError(error instanceof Error ? error.message : "Falha ao salvar UTM."); setSyncStatus("error"); }
+    }
     setForm({ url: "", source: "", medium: "", campaign: "", term: "", content: "" });
     setActiveTab("list");
   };
@@ -293,7 +328,10 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
   const handleDelete = async (id: string) => {
     const updated = utms.filter((u) => u.id !== id);
     setUTMs(updated); saveUTMs(updated);
-    try { await fetch(`/api/utms?id=${encodeURIComponent(id)}&siteId=${encodeURIComponent(tracker.siteId)}`, { method: "DELETE" }); } catch { /* cópia local permanece disponível */ }
+    if (userId) {
+      const { error } = await supabase.from("utm_entries").delete().eq("id", id).eq("user_id", userId);
+      if (error) { setSyncError(error.message); setSyncStatus("error"); } else setSyncStatus("synced");
+    }
   };
 
   const handleResetMetrics = async () => {
@@ -388,6 +426,16 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
 
   return (
     <div className="max-w-[1100px] mx-auto space-y-6">
+      <div className="card p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[12px]">
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full" style={{ background: syncStatus === "synced" ? "var(--green)" : syncStatus === "error" ? "var(--red)" : syncStatus === "local" ? "var(--yellow)" : "var(--blue)" }} />
+          <strong>{syncStatus === "synced" ? "Sincronizado" : syncStatus === "syncing" ? "Sincronizando" : syncStatus === "local" ? "Somente neste dispositivo" : `Erro de sincronização: ${syncError}`}</strong>
+        </div>
+        <span style={{ color: "var(--text-4)" }}>
+          {userId ? `Usuário ${userId.slice(0, 8)}… · ${remoteCounts.sites} sites · ${remoteCounts.utms} UTMs` : "Entre com uma conta Supabase para sincronizar"}
+          {lastSyncedAt ? ` · ${new Date(lastSyncedAt).toLocaleTimeString("pt-BR")}` : ""}
+        </span>
+      </div>
       <div className="rounded-2xl overflow-hidden border" style={{ borderColor: "var(--border)", background: "var(--surface)", boxShadow: "var(--shadow-sm)" }}>
         <div className="p-5 lg:p-6" style={{ background: "linear-gradient(135deg, #0f172a 0%, #172554 46%, #064e3b 100%)" }}>
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
