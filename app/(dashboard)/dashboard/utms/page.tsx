@@ -192,7 +192,7 @@ type TrackingSummary = {
 
 type UTMTab = "create" | "list" | "tracking" | "data" | "checkout" | "contacts" | "debug";
 
-export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab } = {}) {
+export default function UTMsPage({ initialTab = "data" }: { initialTab?: UTMTab } = {}) {
   const [utms, setUTMs]   = useState<UTMEntry[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -543,9 +543,6 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
                 <button type="button" onClick={() => setActiveTab("data")} className="px-3 py-2 rounded-lg text-[12px] font-bold text-white" style={{ background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.18)" }}>
                   <BarChart3 className="w-3.5 h-3.5 inline mr-1" strokeWidth={2.5} /> Ver métricas
                 </button>
-                <button type="button" onClick={() => setActiveTab("checkout")} className="px-3 py-2 rounded-lg text-[12px] font-bold text-white" style={{ background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.18)" }}>
-                  <MousePointerClick className="w-3.5 h-3.5 inline mr-1" strokeWidth={2.5} /> Eventos do funil
-                </button>
               </div>
             </div>
             <div className="w-full lg:w-[360px] rounded-xl p-4" style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.16)", backdropFilter: "blur(10px)" }}>
@@ -596,14 +593,12 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
 
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-xl w-full overflow-x-auto" style={{ background: "var(--bg-muted)" }}>
-        {[
-          { id: "create", label: "Criar" },
-          { id: "list", label: `Biblioteca (${utms.length})` },
-          { id: "tracking", label: "Instalar" },
-          { id: "data", label: "Dashboard" },
-          { id: "checkout", label: "Checkout" },
-          { id: "contacts", label: "Leads" },
-          { id: "debug", label: "Debug" },
+          {[
+            { id: "data", label: "Cockpit" },
+            { id: "create", label: "Nova UTM" },
+            { id: "list", label: `Campanhas (${utms.length})` },
+            { id: "tracking", label: "Instalar" },
+            { id: "debug", label: "Auditoria" },
         ].map((t) => (
           <button key={t.id} onClick={() => setActiveTab(t.id as any)}
             className="px-4 py-2 rounded-lg text-[13px] font-semibold transition-all duration-150 whitespace-nowrap"
@@ -1278,6 +1273,57 @@ window.trackfyPurchase({
                   </div>
                 </div>
               </div>
+
+              {activeTab === "data" && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="card p-5">
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Leads no fluxo</h2>
+                      <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Contatos capturados por campanha e oferta.</p>
+                    </div>
+                    <span className="badge badge-blue">{savedLeads} leads</span>
+                  </div>
+                  <div className="space-y-2">
+                    {savedContacts.slice(0, 4).map((contact) => (
+                      <div key={`${contact.email || contact.phone || contact.firstSeenAt}-${contact.lastSeenAt}`} className="rounded-xl p-3 flex items-center justify-between gap-3" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-bold truncate" style={{ color: "var(--text-1)" }}>{contact.name || contact.email || contact.phone || "Lead sem nome"}</p>
+                          <p className="text-[11px] truncate" style={{ color: "var(--text-4)" }}>{contact.source} / {contact.campaign}</p>
+                        </div>
+                        <span className={contact.ordersCount > 0 ? "badge badge-green" : "badge badge-blue"}>{contact.ordersCount > 0 ? "Comprou" : "Lead"}</span>
+                      </div>
+                    ))}
+                    {savedContacts.length === 0 && <p className="text-[13px] rounded-xl p-4" style={{ color: "var(--text-4)", background: "var(--bg-subtle)" }}>Os leads aparecem aqui quando formulário, checkout ou compra enviarem nome, e-mail ou telefone.</p>}
+                  </div>
+                </div>
+
+                <div className="card p-5">
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Checkout e pagamentos</h2>
+                      <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Resumo do gargalo entre intenção de compra e compra paga.</p>
+                    </div>
+                    <span className="badge badge-yellow">{checkoutGap} sem compra</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: "Checkout", value: summary.totals.checkouts, color: "var(--yellow)" },
+                      { label: "Pagamento", value: paymentSelections || paymentCount, color: "#fb7185" },
+                      { label: "Compra", value: summary.totals.purchases, color: "var(--green)" },
+                    ].map((item) => (
+                      <div key={item.label} className="rounded-xl p-3" style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)" }}>
+                        <p className="text-[11px] font-bold uppercase" style={{ color: "var(--text-4)" }}>{item.label}</p>
+                        <p className="text-[24px] font-bold mt-1" style={{ color: item.color }}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[12px] mt-3 leading-relaxed" style={{ color: "var(--text-3)" }}>
+                    {checkoutGap > 0 ? "O principal gargalo está após o checkout. Confira se o evento de compra aprovada está disparando." : "Checkout e compra estão coerentes para o período selecionado."}
+                  </p>
+                </div>
+              </div>
+              )}
 
               {activeTab === "checkout" && (
               <div className="card overflow-hidden">

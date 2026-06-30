@@ -353,6 +353,12 @@
       max-width: 48px;
       max-height: 48px;
     }
+
+    .video-studio-hero {
+      display: grid;
+      padding: 16px;
+      border-radius: 18px;
+    }
   }
 
   /* Badge */
@@ -776,6 +782,46 @@
     color: #e0f2fe;
     font-size: 13px;
     line-height: 1.45;
+  }
+
+  .video-studio-hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(59, 130, 246, 0.18);
+    border-radius: 24px;
+    padding: 22px;
+    background:
+      radial-gradient(circle at 8% 20%, rgba(59,130,246,0.28), transparent 34%),
+      radial-gradient(circle at 92% 18%, rgba(168,85,247,0.18), transparent 30%),
+      linear-gradient(135deg, #020617, #0f172a 62%, #111827);
+    color: white;
+    box-shadow: 0 22px 70px rgba(2,6,23,0.22);
+  }
+
+  .video-studio-hero__eyebrow {
+    color: #93c5fd;
+    font-size: 11px;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .video-studio-hero h1 {
+    margin-top: 5px;
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    line-height: 0.95;
+    font-weight: 900;
+    letter-spacing: -0.055em;
+  }
+
+  .video-studio-hero p:last-child {
+    margin-top: 10px;
+    max-width: 660px;
+    color: #cbd5e1;
+    font-size: 14px;
   }
 
   /* Section label */
