@@ -498,12 +498,14 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
     { label: "Checkouts", value: summary?.totals.checkouts ?? 0, accent: "#f59e0b", hint: "intenções de compra" },
     { label: "Compras", value: summary?.totals.purchases ?? 0, accent: "#a855f7", hint: `${funnelRates.checkoutToPurchase.toFixed(1)}% checkout > compra` },
   ];
+  const funnelMax = Math.max(1, summary?.totals.visits ?? 0, summary?.totals.leads ?? 0, summary?.totals.checkouts ?? 0, paymentSelections || paymentCount, summary?.totals.purchases ?? 0);
+  const tubeScale = (value: number) => Math.max(value > 0 ? 10 : 5, Math.min(100, (value / funnelMax) * 100));
   const funnel3D = [
-    { label: "Visitas", value: summary?.totals.visits ?? 0, width: 100, color: "#2563eb", detail: `${visitorCount} visitantes` },
-    { label: "Leads", value: summary?.totals.leads ?? savedLeads, width: Math.max(18, funnelRates.visitToLead || 0), color: "#06b6d4", detail: `${funnelRates.visitToLead.toFixed(1)}% das sessões` },
-    { label: "Checkout", value: summary?.totals.checkouts ?? 0, width: Math.max(14, funnelRates.visitToCheckout || 0), color: "#f59e0b", detail: `${funnelRates.visitToCheckout.toFixed(1)}% chegaram` },
-    { label: "Pagamento", value: paymentSelections || paymentCount, width: summary?.totals.visits ? Math.max(12, ((paymentSelections || paymentCount) / summary.totals.visits) * 100) : 12, color: "#fb7185", detail: "Pix/cartão selecionado" },
-    { label: "Compra", value: summary?.totals.purchases ?? 0, width: Math.max(10, funnelRates.visitToPurchase || 0), color: "#22c55e", detail: revenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) },
+    { label: "Visitas", value: summary?.totals.visits ?? 0, width: tubeScale(summary?.totals.visits ?? 0), color: "#2563eb", detail: `${visitorCount} visitantes` },
+    { label: "Leads", value: summary?.totals.leads ?? savedLeads, width: tubeScale(summary?.totals.leads ?? savedLeads), color: "#06b6d4", detail: `${funnelRates.visitToLead.toFixed(1)}% das sessões` },
+    { label: "Checkout", value: summary?.totals.checkouts ?? 0, width: tubeScale(summary?.totals.checkouts ?? 0), color: "#f59e0b", detail: `${funnelRates.visitToCheckout.toFixed(1)}% chegaram` },
+    { label: "Pagamento", value: paymentSelections || paymentCount, width: tubeScale(paymentSelections || paymentCount), color: "#fb7185", detail: "Pix/cartão selecionado" },
+    { label: "Compra", value: summary?.totals.purchases ?? 0, width: tubeScale(summary?.totals.purchases ?? 0), color: "#22c55e", detail: revenue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) },
   ];
   const setupItems = [
     { label: "Oferta", ok: Boolean(tracker.name && tracker.siteId), detail: tracker.name || "Sem nome" },
@@ -1242,15 +1244,15 @@ window.trackfyPurchase({
                 </div>
 
                 <div className="trackfy-cockpit__grid">
-                  <div className="trackfy-funnel3d" aria-label="Funil visual de conversão">
+                  <div className="trackfy-tube-funnel" aria-label="Funil visual de conversão em tubo">
                     {funnel3D.map((step, index) => (
-                      <div key={step.label} className="trackfy-funnel3d__row" style={{ ["--stage-width" as string]: `${Math.min(100, step.width)}%`, ["--stage-color" as string]: step.color }}>
-                        <div className="trackfy-funnel3d__label">
+                      <div key={step.label} className="trackfy-tube-funnel__row" style={{ ["--tube-width" as string]: `${Math.min(100, step.width)}%`, ["--tube-size" as string]: `${Math.round(18 + (Math.min(100, step.width) * 0.32))}px`, ["--tube-color" as string]: step.color }}>
+                        <div className="trackfy-tube-funnel__label">
                           <span>{String(index + 1).padStart(2, "0")}</span>
                           <strong>{step.label}</strong>
                         </div>
-                        <div className="trackfy-funnel3d__stage">
-                          <div className="trackfy-funnel3d__bar">
+                        <div className="trackfy-tube-funnel__stage">
+                          <div className="trackfy-tube-funnel__tube">
                             <b>{step.value}</b>
                             <small>{step.detail}</small>
                           </div>
@@ -1607,18 +1609,20 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                     </div>
                     <TrendingUp className="w-5 h-5" style={{ color: "var(--blue)" }} />
                   </div>
-                  <div className="space-y-3">
+                  <div className="trackfy-tube-funnel trackfy-tube-funnel--light" aria-label="Funil em tempo real em tubo">
                     {funnelSteps.map((step) => {
                       const max = Math.max(1, summary.totals.visits);
                       const width = Math.max(4, Math.min(100, (step.value / max) * 100));
                       return (
-                        <div key={step.key}>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[12px] font-bold" style={{ color: "var(--text-2)" }}>{step.label}</span>
-                            <span className="text-[13px] font-bold tabular-nums" style={{ color: "var(--text-1)" }}>{step.value}</span>
+                        <div key={step.key} className="trackfy-tube-funnel__row" style={{ ["--tube-width" as string]: `${width}%`, ["--tube-size" as string]: `${Math.round(16 + (width * 0.3))}px`, ["--tube-color" as string]: step.color }}>
+                          <div className="trackfy-tube-funnel__label">
+                            <strong>{step.label}</strong>
                           </div>
-                          <div className="h-3 rounded-full overflow-hidden" style={{ background: "var(--bg-muted)" }}>
-                            <div className="h-full rounded-full transition-all" style={{ width: `${width}%`, background: step.color }} />
+                          <div className="trackfy-tube-funnel__stage">
+                            <div className="trackfy-tube-funnel__tube">
+                              <b>{step.value}</b>
+                              <small>{width.toFixed(0)}% do topo</small>
+                            </div>
                           </div>
                         </div>
                       );
