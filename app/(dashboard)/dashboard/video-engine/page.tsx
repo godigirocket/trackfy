@@ -54,6 +54,12 @@ const FORMATS = [
   { id: "landscape", name: "Youtube / Landscape", ratio: "16:9", desc: "16:9 horizontal" }
 ];
 
+const MUSIC_TRACKS = [
+  { id: "synth", name: "Beat Synth Wave (Padrão)", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
+  { id: "corporate", name: "Corporate Upbeat", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
+  { id: "lofi", name: "Lo-Fi Beats Chill", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" }
+];
+
 // Pre-seeded history
 const INITIAL_HISTORY = [
   {
@@ -88,11 +94,19 @@ export default function VideoEnginePage() {
 
   // Form selections
   const [prompt, setPrompt] = useState("");
-  const [files, setFiles] = useState<Array<{ name: string; size: string; preset?: boolean }>>([]);
+  const [files, setFiles] = useState<Array<{ 
+    name: string; 
+    size: string; 
+    preset?: boolean;
+    file?: File;
+    url?: string;
+    type?: 'image' | 'video' | 'audio';
+  }>>([]);
   const [selectedFormat, setSelectedFormat] = useState("reels");
   const [selectedPreset, setSelectedPreset] = useState("site-prof");
   const [selectedHook, setSelectedHook] = useState(HOOKS[0]);
   const [selectedCta, setSelectedCta] = useState(CTAS[0]);
+  const [selectedMusicTrack, setSelectedMusicTrack] = useState("synth");
   
   // Customization
   const [musicVolume, setMusicVolume] = useState(30);
@@ -119,6 +133,17 @@ export default function VideoEnginePage() {
     }
   }, []);
 
+  // Clean up blob URLs to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      files.forEach(f => {
+        if (f.url && f.url.startsWith("blob:")) {
+          URL.revokeObjectURL(f.url);
+        }
+      });
+    };
+  }, [files]);
+
   const saveHistory = (newHistory: typeof INITIAL_HISTORY) => {
     setHistory(newHistory);
     localStorage.setItem("tf_video_history", JSON.stringify(newHistory));
@@ -132,53 +157,295 @@ export default function VideoEnginePage() {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const fileList = Array.from(e.target.files).map(f => ({
-        name: f.name,
-        size: (f.size / (1024 * 1024)).toFixed(1) + " MB"
-      }));
+      const fileList = Array.from(e.target.files).map(f => {
+        const type = f.type.startsWith("video/") ? "video" : f.type.startsWith("audio/") ? "audio" : "image";
+        return {
+          name: f.name,
+          size: (f.size / (1024 * 1024)).toFixed(1) + " MB",
+          file: f,
+          url: URL.createObjectURL(f),
+          type: type as 'image' | 'video' | 'audio'
+        };
+      });
       setFiles([...files, ...fileList]);
     }
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!prompt.trim()) {
       alert("Por favor, descreva o vídeo que deseja criar no Passo 1.");
       setStep(1);
       return;
     }
+
+    const userVideo = files.find(f => f.type === 'video');
+    const userAudio = files.find(f => f.type === 'audio');
+
+    const videoSrc = userVideo?.url || (selectedFormat === "feed" 
+      ? "https://assets.mixkit.co/videos/preview/mixkit-business-woman-using-a-tablet-41225-large.mp4" 
+      : "https://assets.mixkit.co/videos/preview/mixkit-hand-holding-smartphone-with-green-screen-39744-large.mp4");
+
+    const audioSrc = userAudio?.url || MUSIC_TRACKS.find(m => m.id === selectedMusicTrack)?.url || MUSIC_TRACKS[0].url;
+
     setRendering(true);
     setRenderProgress(0);
     setActiveTab("builder");
 
-    const interval = setInterval(() => {
-      setRenderProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setRendering(false);
-          
-          // Add to history
-          const newVideo = {
-            id: "vid-" + Date.now(),
-            name: `${selectedPreset ? PRESETS.find(p => p.id === selectedPreset)?.name : "Vídeo"} - Variação ${Math.floor(Math.random() * 100)}`,
-            date: new Date().toISOString().split("T")[0],
-            format: selectedFormat === "reels" ? "9:16 (Reels)" : selectedFormat === "feed" ? "1:1 (Feed)" : "16:9 (Landscape)",
-            preset: PRESETS.find(p => p.id === selectedPreset)?.name || "Personalizado",
-            status: "Renderizado",
-            prompt: prompt,
-            hook: selectedHook,
-            cta: selectedCta,
-            videoUrl: selectedFormat === "feed" 
-              ? "https://assets.mixkit.co/videos/preview/mixkit-business-woman-using-a-tablet-41225-large.mp4" 
-              : "https://assets.mixkit.co/videos/preview/mixkit-hand-holding-smartphone-with-green-screen-39744-large.mp4"
-          };
-          saveHistory([newVideo, ...history]);
-          setActivePreviewUrl(newVideo.videoUrl);
-          setPlayingPreview(true);
-          return 100;
+    const video = document.createElement("video");
+    video.src = videoSrc;
+    video.crossOrigin = "anonymous";
+    video.muted = true;
+    video.playsInline = true;
+
+    const audio = document.createElement("audio");
+    audio.src = audioSrc;
+    audio.crossOrigin = "anonymous";
+    audio.loop = true;
+
+    // Force loading metadata
+    await new Promise((resolve) => {
+      video.onloadedmetadata = () => resolve(true);
+      video.onerror = () => resolve(false);
+      // Fallback timeout
+      setTimeout(() => resolve(false), 2000);
+    });
+
+    let width = 540;
+    let height = 960;
+    if (selectedFormat === "feed") {
+      width = 540;
+      height = 540;
+    } else if (selectedFormat === "landscape") {
+      width = 960;
+      height = 540;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      alert("Não foi possível inicializar o canvas.");
+      setRendering(false);
+      return;
+    }
+
+    let audioCtx: AudioContext | null = null;
+    let audioDest: MediaStreamAudioDestinationNode | null = null;
+
+    try {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      audioCtx = new AudioCtxClass();
+      const videoSource = audioCtx.createMediaElementSource(video);
+      const audioSource = audioCtx.createMediaElementSource(audio);
+      const videoGain = audioCtx.createGain();
+      const audioGain = audioCtx.createGain();
+
+      videoGain.gain.value = 0.8;
+      audioGain.gain.value = musicVolume / 100;
+
+      audioDest = audioCtx.createMediaStreamDestination();
+      videoSource.connect(videoGain).connect(audioDest);
+      audioSource.connect(audioGain).connect(audioDest);
+    } catch (err) {
+      console.warn("AudioContext setup failed:", err);
+    }
+
+    const canvasStream = canvas.captureStream(30);
+    const tracks = [...canvasStream.getVideoTracks()];
+    if (audioDest) {
+      tracks.push(...audioDest.stream.getAudioTracks());
+    }
+    const recordStream = new MediaStream(tracks);
+
+    let recorder: MediaRecorder;
+    const recordedChunks: Blob[] = [];
+
+    let options = { mimeType: 'video/webm;codecs=vp9,opus' };
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { mimeType: 'video/webm;codecs=vp8,opus' };
+    }
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { mimeType: 'video/webm' };
+    }
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { mimeType: 'video/mp4' };
+    }
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { mimeType: '' };
+    }
+
+    try {
+      recorder = new MediaRecorder(recordStream, options);
+    } catch (err) {
+      console.error("Failed to create MediaRecorder:", err);
+      alert("Seu navegador não suporta gravação de vídeo.");
+      setRendering(false);
+      return;
+    }
+
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
+
+    const drawWrappedText = (
+      text: string,
+      x: number,
+      y: number,
+      maxWidth: number,
+      lineHeight: number,
+      textColor: string,
+      boxColor: string
+    ) => {
+      const words = text.split(" ");
+      let line = "";
+      const lines: string[] = [];
+
+      ctx.font = "bold 24px sans-serif";
+      for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + " ";
+        const metrics = ctx.measureText(testLine);
+        const testWidth = metrics.width;
+        if (testWidth > maxWidth && n > 0) {
+          lines.push(line);
+          line = words[n] + " ";
+        } else {
+          line = testLine;
         }
-        return prev + 5;
-      });
-    }, 200);
+      }
+      lines.push(line);
+
+      const boxHeight = lines.length * lineHeight + 20;
+      const boxWidth = Math.min(maxWidth + 40, width - 40);
+      ctx.fillStyle = boxColor;
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(x - boxWidth / 2, y - boxHeight / 2 - 5, boxWidth, boxHeight, 12);
+      } else {
+        ctx.rect(x - boxWidth / 2, y - boxHeight / 2 - 5, boxWidth, boxHeight);
+      }
+      ctx.fill();
+
+      ctx.fillStyle = textColor;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      let startY = y - ((lines.length - 1) * lineHeight) / 2;
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i].trim(), x, startY + i * lineHeight);
+      }
+    };
+
+    let animationFrameId: number;
+    let isDrawing = true;
+    let gradOffset = 0;
+
+    const drawFrame = () => {
+      if (!isDrawing) return;
+
+      try {
+        ctx.drawImage(video, 0, 0, width, height);
+      } catch (err) {
+        const grad = ctx.createLinearGradient(0, 0, width, height);
+        gradOffset += 0.01;
+        const color1 = `hsl(${(gradOffset * 360) % 360}, 70%, 20%)`;
+        const color2 = `hsl(${(gradOffset * 360 + 120) % 360}, 70%, 15%)`;
+        const color3 = `hsl(${(gradOffset * 360 + 240) % 360}, 70%, 10%)`;
+        grad.addColorStop(0, color1);
+        grad.addColorStop(0.5, color2);
+        grad.addColorStop(1, color3);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      const currentTime = video.currentTime;
+      const duration = video.duration || 10;
+      const progressPercent = Math.min(Math.round((currentTime / duration) * 100), 99);
+      setRenderProgress(progressPercent);
+
+      if (currentTime < 3) {
+        drawWrappedText(
+          selectedHook,
+          width / 2,
+          height * 0.35,
+          width - 80,
+          32,
+          "#FFFFFF",
+          "rgba(0, 0, 0, 0.75)"
+        );
+      }
+
+      if (duration - currentTime <= 4) {
+        drawWrappedText(
+          selectedCta,
+          width / 2,
+          height * 0.75,
+          width - 80,
+          32,
+          "#FFFFFF",
+          "rgba(37, 99, 235, 0.9)"
+        );
+      }
+
+      animationFrameId = requestAnimationFrame(drawFrame);
+    };
+
+    recorder.onstop = () => {
+      isDrawing = false;
+      cancelAnimationFrame(animationFrameId);
+
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const outputUrl = URL.createObjectURL(blob);
+
+      const newVideo = {
+        id: "vid-" + Date.now(),
+        name: `${selectedPreset ? PRESETS.find(p => p.id === selectedPreset)?.name : "Vídeo"} - Variação ${Math.floor(Math.random() * 100)}`,
+        date: new Date().toISOString().split("T")[0],
+        format: selectedFormat === "reels" ? "9:16 (Reels)" : selectedFormat === "feed" ? "1:1 (Feed)" : "16:9 (Landscape)",
+        preset: PRESETS.find(p => p.id === selectedPreset)?.name || "Personalizado",
+        status: "Renderizado",
+        prompt: prompt,
+        hook: selectedHook,
+        cta: selectedCta,
+        videoUrl: outputUrl
+      };
+
+      saveHistory([newVideo, ...history]);
+      setActivePreviewUrl(outputUrl);
+      setPlayingPreview(true);
+      setRenderProgress(100);
+      setRendering(false);
+
+      video.pause();
+      audio.pause();
+      if (audioCtx) {
+        audioCtx.close().catch(() => {});
+      }
+    };
+
+    video.play().catch(err => {
+      console.warn("Failed to play video:", err);
+    });
+    audio.play().catch(err => {
+      console.warn("Failed to play audio:", err);
+    });
+
+    recorder.start();
+    drawFrame();
+
+    video.onended = () => {
+      if (recorder.state !== "inactive") {
+        recorder.stop();
+      }
+    };
+
+    const durationMs = (video.duration || 10) * 1000;
+    setTimeout(() => {
+      if (recorder.state !== "inactive") {
+        recorder.stop();
+      }
+    }, durationMs + 2000);
   };
 
   const handleDuplicate = (video: typeof INITIAL_HISTORY[0]) => {
@@ -328,12 +595,12 @@ export default function VideoEnginePage() {
 
                   {/* Drag and Drop Zone */}
                   <label className="border-2 border-dashed border-slate-800 hover:border-blue-500/50 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer bg-slate-950 transition-all">
-                    <input type="file" multiple onChange={handleFileUpload} className="hidden" accept="image/*,video/*" />
+                    <input type="file" multiple onChange={handleFileUpload} className="hidden" accept="image/*,video/*,audio/*" />
                     <div className="w-10 h-10 rounded-xl bg-blue-600/10 flex items-center justify-center text-blue-500">
                       <Upload className="w-5 h-5" />
                     </div>
                     <span className="text-[13px] font-semibold text-white">Arraste e solte ou clique para enviar</span>
-                    <span className="text-[11px] text-slate-500">Suporta PNG, JPG, MP4 (máximo 50MB)</span>
+                    <span className="text-[11px] text-slate-500">Suporta PNG, JPG, MP4, MP3 (máximo 50MB)</span>
                   </label>
 
                   {/* File List */}
@@ -479,6 +746,20 @@ export default function VideoEnginePage() {
                   <div className="grid grid-cols-2 gap-3 pt-1">
                     <div className="space-y-2 p-3 rounded-xl border border-slate-850 bg-slate-900/30">
                       <span className="text-[11px] font-bold uppercase text-slate-400 flex items-center gap-1"><Music className="w-3.5 h-3.5" /> Música</span>
+                      
+                      <select 
+                        value={selectedMusicTrack} 
+                        onChange={(e) => setSelectedMusicTrack(e.target.value)}
+                        className="select py-1 w-full text-[11px] bg-slate-950 text-white border border-slate-800 rounded-lg mb-2"
+                      >
+                        {MUSIC_TRACKS.map(track => (
+                          <option key={track.id} value={track.id}>{track.name}</option>
+                        ))}
+                        {files.some(f => f.type === 'audio') && (
+                          <option value="user-audio">🎵 Áudio Carregado</option>
+                        )}
+                      </select>
+
                       <div className="flex items-center gap-2">
                         <Volume2 className="w-4 h-4 text-slate-400" />
                         <input
