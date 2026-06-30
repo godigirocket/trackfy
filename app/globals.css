@@ -101,7 +101,11 @@
     line-height: 1.6;
     font-weight: 400;
     letter-spacing: -0.011em;
+    overflow-x: hidden;
   }
+
+  img, video, canvas, svg { max-width: 100%; }
+  pre, code { max-width: 100%; }
 
   /* Scrollbar */
   ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -210,6 +214,43 @@
   .select option {
     background: var(--surface);
     color: var(--text-1);
+  }
+
+  @media (max-width: 640px) {
+    body { font-size: 13px; }
+
+    .card,
+    .card-flat,
+    .feature-card,
+    .metric-card {
+      border-radius: var(--r-lg);
+    }
+
+    .metric-card,
+    .feature-card {
+      padding: 1rem;
+    }
+
+    .input,
+    .select {
+      min-width: 0;
+      font-size: 16px;
+      padding: 9px 11px;
+    }
+
+    .btn-primary,
+    .btn-secondary {
+      min-height: 40px;
+    }
+
+    table {
+      min-width: 680px;
+    }
+
+    .card:has(table) {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
   }
 
   /* Badge */

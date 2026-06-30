@@ -205,6 +205,7 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
   const [summaryError, setSummaryError] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [rangeDays, setRangeDays] = useState(7);
+  const [rangeFilter, setRangeFilter] = useState("7");
   const [resetText, setResetText] = useState("");
   const [resettingMetrics, setResettingMetrics] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -300,6 +301,27 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
     const site: TrackingSite = { id: crypto.randomUUID(), name: `Nova oferta ${sites.length + 1}`, websiteUrl: "", measurementId: "", metaPixelId: "", siteId: crypto.randomUUID(), endpoint: window.location.origin, installed: false };
     setSites((items) => [...items, site]); setTracker(site); setActiveTab("tracking"); setSummary(null);
   };
+  const deleteSite = async () => {
+    if (!tracker.siteId || sites.length <= 1) return;
+    const ok = window.confirm(`Excluir a oferta "${tracker.name || "sem nome"}" e as UTMs dela?`);
+    if (!ok) return;
+    const deletedSiteId = tracker.siteId;
+    const nextSites = sites.filter((site) => site.siteId !== deletedSiteId && site.id !== tracker.id);
+    const nextUTMs = utms.filter((utm) => utm.siteId !== deletedSiteId);
+    const nextTracker = nextSites[0];
+    setSites(nextSites);
+    setTracker(nextTracker);
+    setUTMs(nextUTMs);
+    saveUTMs(nextUTMs);
+    localStorage.setItem(TRACKING_SITES_KEY, JSON.stringify(nextSites));
+    localStorage.setItem(TRACKER_KEY, JSON.stringify(nextTracker));
+    if (userId) {
+      setSyncStatus("syncing");
+      const { error } = await supabase.from("tracking_sites").delete().eq("id", deletedSiteId).eq("user_id", userId);
+      if (error) { setSyncError(error.message); setSyncStatus("error"); }
+      else { setSyncStatus("synced"); setLastSyncedAt(new Date().toISOString()); }
+    }
+  };
 
   const preview = buildURL(form.url, {
     utm_source: form.source, utm_medium: form.medium, utm_campaign: form.campaign,
@@ -312,7 +334,10 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
     if (!tracker.siteId) return;
     setSummaryLoading(true); setSummaryError("");
     try {
-      const response = await fetch(`/api/tracking?siteId=${encodeURIComponent(tracker.siteId)}&days=${rangeDays}`, { cache: "no-store" });
+      const query = rangeFilter === "today" || rangeFilter === "yesterday"
+        ? `period=${rangeFilter}`
+        : `days=${rangeDays}`;
+      const response = await fetch(`/api/tracking?siteId=${encodeURIComponent(tracker.siteId)}&${query}`, { cache: "no-store" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Não foi possível carregar os dados.");
       setSummary(result);
@@ -326,7 +351,7 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
     const timer = window.setInterval(loadSummary, 8000);
     return () => window.clearInterval(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tracker.siteId, rangeDays]);
+  }, [tracker.siteId, rangeDays, rangeFilter]);
 
   const handleSave = async () => {
     if (!form.url || !form.source || !form.medium || !form.campaign) return;
@@ -358,6 +383,24 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
     if (userId) {
       const { error } = await supabase.from("utm_entries").delete().eq("id", id).eq("user_id", userId);
       if (error) { setSyncError(error.message); setSyncStatus("error"); } else setSyncStatus("synced");
+    }
+  };
+  const handleDeleteCampaign = async (target: UTMEntry) => {
+    const ok = window.confirm(`Excluir a campanha "${target.campaign}" desta oferta?`);
+    if (!ok) return;
+    const removed = utms.filter((utm) =>
+      utm.siteId === target.siteId &&
+      utm.campaign.toLowerCase() === target.campaign.toLowerCase() &&
+      utm.source.toLowerCase() === target.source.toLowerCase() &&
+      utm.medium.toLowerCase() === target.medium.toLowerCase()
+    );
+    const updated = utms.filter((utm) => !removed.some((item) => item.id === utm.id));
+    setUTMs(updated); saveUTMs(updated);
+    if (userId && removed.length) {
+      setSyncStatus("syncing");
+      const { error } = await supabase.from("utm_entries").delete().in("id", removed.map((utm) => utm.id)).eq("user_id", userId);
+      if (error) { setSyncError(error.message); setSyncStatus("error"); }
+      else { setSyncStatus("synced"); setLastSyncedAt(new Date().toISOString()); }
     }
   };
 
@@ -448,6 +491,7 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
     debug: { eyebrow: "Auditoria", title: "Precisão e reset do tracking", description: "Confira eventos recebidos, páginas rastreadas e limpe métricas de teste." },
   };
   const activeMeta = tabMeta[activeTab];
+  const rangeLabel = rangeFilter === "today" ? "hoje" : rangeFilter === "yesterday" ? "ontem" : `últimos ${rangeDays === 1 ? "1 dia" : `${rangeDays} dias`}`;
   const setupItems = [
     { label: "Oferta", ok: Boolean(tracker.name && tracker.siteId), detail: tracker.name || "Sem nome" },
     { label: "Domínio", ok: Boolean(tracker.websiteUrl), detail: tracker.websiteUrl || "Cadastre na aba Instalar" },
@@ -494,9 +538,10 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
               <select value={tracker.id} onChange={(e) => selectSite(e.target.value)} className="select mt-2" style={{ background: "rgba(255,255,255,0.95)" }}>
                 {sites.map((site) => <option key={site.id} value={site.id}>{site.name || "Oferta sem nome"}{site.websiteUrl ? ` — ${site.websiteUrl}` : ""}</option>)}
               </select>
-              <div className="grid grid-cols-2 gap-2 mt-3">
+              <div className="grid grid-cols-3 gap-2 mt-3">
                 <button type="button" onClick={() => setActiveTab("tracking")} className="px-3 py-2 rounded-lg text-[12px] font-bold text-white" style={{ background: "rgba(255,255,255,0.13)", border: "1px solid rgba(255,255,255,0.14)" }}>Configurar</button>
                 <button type="button" onClick={createSite} className="px-3 py-2 rounded-lg text-[12px] font-bold text-white" style={{ background: "rgba(16,185,129,0.24)", border: "1px solid rgba(16,185,129,0.32)" }}>Nova oferta</button>
+                <button type="button" onClick={deleteSite} disabled={sites.length <= 1} className="px-3 py-2 rounded-lg text-[12px] font-bold text-white disabled:opacity-40" style={{ background: "rgba(239,68,68,0.22)", border: "1px solid rgba(239,68,68,0.32)" }}>Excluir</button>
               </div>
             </div>
           </div>
@@ -824,6 +869,10 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
                           onMouseLeave={(e) => (e.currentTarget.style.color = "")}>
                           <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
                         </button>
+                        <button onClick={() => handleDeleteCampaign(u)}
+                          className="btn-secondary h-8 px-2 text-[11px] text-red-500" title="Excluir campanha inteira">
+                          Excluir campanha
+                        </button>
                       </div>
                     </div>
 
@@ -893,6 +942,7 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
               </select>
             </div>
             <button type="button" onClick={createSite} className="btn-secondary px-4 py-2"><Plus className="w-4 h-4" />Nova oferta/site</button>
+            <button type="button" onClick={deleteSite} disabled={sites.length <= 1} className="btn-secondary px-4 py-2 text-red-500 disabled:opacity-40"><Trash2 className="w-4 h-4" />Excluir oferta</button>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[390px_1fr] gap-5">
@@ -1011,13 +1061,14 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
               <h2 className="text-[15px] font-bold" style={{ color: "var(--text-1)" }}>Dados do seu site no Trackfy</h2>
               <p className="text-[13px] mt-1" style={{ color: "var(--text-4)" }}>Visitantes, sessões, funil consolidado e páginas separadas por visualização. Atualiza sozinho enquanto esta aba fica aberta.</p>
             </div>
-            <select value={rangeDays} onChange={(e) => setRangeDays(Number(e.target.value))} className="select w-full md:w-36">
-              <option value={1}>Hoje</option>
-              <option value={3}>3 dias</option>
-              <option value={7}>7 dias</option>
-              <option value={14}>14 dias</option>
-              <option value={30}>30 dias</option>
-              <option value={90}>90 dias</option>
+            <select value={rangeFilter} onChange={(e) => { const value = e.target.value; setRangeFilter(value); if (!["today", "yesterday"].includes(value)) setRangeDays(Number(value)); }} className="select w-full md:w-40">
+              <option value="today">Hoje</option>
+              <option value="yesterday">Ontem</option>
+              <option value="3">3 dias</option>
+              <option value="7">7 dias</option>
+              <option value="14">14 dias</option>
+              <option value="30">30 dias</option>
+              <option value="90">90 dias</option>
             </select>
             <button type="button" onClick={loadSummary} disabled={summaryLoading || !tracker.siteId} className="btn-secondary px-3 py-2">
               <RefreshCw className={`w-4 h-4 ${summaryLoading ? "animate-spin" : ""}`} strokeWidth={2.25} />
@@ -1108,7 +1159,7 @@ window.trackfyPurchase({
                   <div>
                     <p className="text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: "#93c5fd" }}>Performance da oferta</p>
                     <h2 className="text-[18px] font-bold mt-1 text-white">{tracker.name || "Oferta selecionada"}</h2>
-                    <p className="text-[12px] mt-1 text-slate-300">{tracker.websiteUrl || "Site sem URL cadastrada"} · últimos {rangeDays === 1 ? "1 dia" : `${rangeDays} dias`}</p>
+                    <p className="text-[12px] mt-1 text-slate-300">{tracker.websiteUrl || "Site sem URL cadastrada"} · {rangeLabel}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full px-3 py-1 text-[11px] font-bold text-emerald-200" style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)" }}>Atualiza 5s</span>
@@ -1490,7 +1541,7 @@ window.trackfyPostPurchase({ id: "upsell_vip", value: 97 });`}</code></pre>
                   <div className="flex items-center justify-between gap-3 mb-5">
                     <div>
                       <h2 className="text-[14px] font-bold" style={{ color: "var(--text-1)" }}>Funil em tempo real</h2>
-                      <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Período: últimos {rangeDays === 1 ? "1 dia" : `${rangeDays} dias`} · atualizado {new Date(summary.updatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</p>
+                      <p className="text-[12px] mt-1" style={{ color: "var(--text-4)" }}>Período: {rangeLabel} · atualizado {new Date(summary.updatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</p>
                     </div>
                     <TrendingUp className="w-5 h-5" style={{ color: "var(--blue)" }} />
                   </div>

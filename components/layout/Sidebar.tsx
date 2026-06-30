@@ -89,10 +89,10 @@ export function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: (
     {open && <button type="button" aria-label="Fechar menu" onClick={onClose} className="fixed inset-0 z-40 bg-black/50 md:hidden" />}
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-50 shrink-0 flex flex-col h-screen transition-transform duration-200 md:relative md:z-auto md:translate-x-0",
+        "fixed inset-y-0 left-0 z-50 shrink-0 flex flex-col h-dvh transition-transform duration-200 md:relative md:z-auto md:translate-x-0",
         open ? "translate-x-0" : "-translate-x-full"
       )}
-      style={{ width: collapsed ? 68 : 216, background: "var(--bg-subtle)", borderRight: "1px solid var(--border)" }}
+      style={{ width: collapsed ? 68 : "min(86vw, 216px)", background: "var(--bg-subtle)", borderRight: "1px solid var(--border)" }}
     >
       {/* Logo */}
       <div className="h-[56px] flex items-center justify-between px-3" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -112,7 +112,7 @@ export function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: (
         <button
           type="button"
           onClick={() => setCollapsed((v) => !v)}
-          className="btn-icon w-8 h-8"
+          className="btn-icon w-8 h-8 hidden md:inline-flex"
           title={collapsed ? "Abrir menu" : "Fechar menu"}
         >
           {collapsed ? <PanelLeftOpen className="w-4 h-4" strokeWidth={2.5} /> : <PanelLeftClose className="w-4 h-4" strokeWidth={2.5} />}

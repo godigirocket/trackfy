@@ -327,14 +327,28 @@ export async function GET(request: NextRequest) {
   if (!supabase) return json({ error: "Tracking backend ainda não configurado." }, { status: 503 });
   if (!siteId || siteId.length > 120) return json({ error: "siteId obrigatório." }, { status: 400 });
 
+  const period = request.nextUrl.searchParams.get("period");
   const daysParam = Number(request.nextUrl.searchParams.get("days") ?? "30");
   const days = [1, 3, 7, 14, 30, 90].includes(daysParam) ? daysParam : 30;
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const now = new Date();
+  let since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+  let until: string | null = null;
+  if (period === "today" || period === "yesterday") {
+    const saoPauloOffsetMs = 3 * 60 * 60 * 1000;
+    const localNow = new Date(now.getTime() - saoPauloOffsetMs);
+    const targetLocal = new Date(Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate()));
+    if (period === "yesterday") targetLocal.setUTCDate(targetLocal.getUTCDate() - 1);
+    const startUtc = new Date(targetLocal.getTime() + saoPauloOffsetMs);
+    const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60 * 1000 - 1);
+    since = startUtc.toISOString();
+    until = endUtc.toISOString();
+  }
   const { data, error } = await supabase
     .from("trackfy_events")
     .select("event_name,event_id,page_path,page_url,source,medium,campaign,content,channel,created_at,value")
     .eq("site_id", siteId)
     .gte("created_at", since)
+    .lte("created_at", until ?? now.toISOString())
     .order("created_at", { ascending: false })
     .limit(5000);
   if (error) return json({ error: "Não foi possível carregar os dados." }, { status: 500 });
@@ -344,6 +358,7 @@ export async function GET(request: NextRequest) {
     .select("transaction_id,status,value,currency,product,source,medium,campaign,channel,created_at,updated_at")
     .eq("site_id", siteId)
     .gte("updated_at", since)
+    .lte("updated_at", until ?? now.toISOString())
     .order("updated_at", { ascending: false })
     .limit(5000);
   // Permite publicar o painel antes de a migração de pedidos ser executada.

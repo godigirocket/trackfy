@@ -26,13 +26,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg)" }}>
+    <div className="flex h-dvh overflow-hidden" style={{ background: "var(--bg)" }}>
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
         <ConquestBar />
         <main
-          className="flex-1 overflow-auto p-4 md:px-7 md:py-6"
+          className="flex-1 overflow-auto p-3 sm:p-4 md:px-7 md:py-6"
           style={{ background: "var(--bg)" }}
         >
           {children}
