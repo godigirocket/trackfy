@@ -501,7 +501,7 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
 
   return (
     <div className="max-w-[1100px] mx-auto space-y-6">
-      <div className="card p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[12px]">
+      <div className="card mobile-command-card p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[12px]">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full" style={{ background: syncStatus === "synced" ? "var(--green)" : syncStatus === "error" ? "var(--red)" : syncStatus === "local" ? "var(--yellow)" : "var(--blue)" }} />
           <strong>{syncStatus === "synced" ? "Sincronizado" : syncStatus === "syncing" ? "Sincronizando" : syncStatus === "local" ? "Somente neste dispositivo" : `Erro de sincronização: ${syncError}`}</strong>
@@ -934,7 +934,7 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
             <span className="badge badge-blue">Trackfy nativo</span>
           </div>
 
-          <div className="card p-4 flex flex-col md:flex-row md:items-end gap-3">
+          <div className="card mobile-command-card p-4 flex flex-col md:flex-row md:items-end gap-3">
             <div className="flex-1">
               <label className="section-label mb-1.5 block" style={{ padding: 0 }}>Oferta/site em edição</label>
               <select value={tracker.id} onChange={(e) => selectSite(e.target.value)} className="select">
@@ -1053,7 +1053,7 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
             </div>
             <button type="button" onClick={() => setActiveTab("tracking")} className="btn-secondary px-4 py-2">Configurar oferta</button>
           </div>
-          <div className="card p-5 flex flex-col md:flex-row md:items-center gap-4">
+          <div className="card mobile-command-card p-5 flex flex-col md:flex-row md:items-center gap-4">
             <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--blue-muted)" }}>
               <Database className="w-5 h-5" style={{ color: "var(--blue)" }} strokeWidth={2.25} />
             </div>

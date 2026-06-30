@@ -12,7 +12,7 @@ function Select<T extends string>({
   tooltip?: string;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5 min-w-0">
       <div className="flex items-center gap-1">
         <span className="section-label" style={{ padding: 0 }}>{label}</span>
         {tooltip && <HelpCircle className="w-3 h-3" style={{ color: "var(--text-4)" }} strokeWidth={2} />}
@@ -21,7 +21,7 @@ function Select<T extends string>({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value as T)}
-          className="select min-w-[130px]"
+          className="select w-full sm:min-w-[130px]"
         >
           {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -42,7 +42,7 @@ export function FilterBar() {
   } = useFilterStore();
 
   return (
-    <div className="flex items-end gap-3 flex-wrap">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:flex xl:items-end gap-3 w-full">
       <Select<PeriodFilter>
         label="Período"
         value={period}

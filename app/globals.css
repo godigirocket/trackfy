@@ -219,11 +219,44 @@
   @media (max-width: 640px) {
     body { font-size: 13px; }
 
+    h1 { font-size: clamp(1.35rem, 7vw, 1.85rem); line-height: 1.12; }
+    h2 { line-height: 1.18; }
+
     .card,
     .card-flat,
     .feature-card,
     .metric-card {
       border-radius: var(--r-lg);
+    }
+
+    .card[class*="p-6"],
+    .card[class*="p-5"],
+    .card[class*="p-4"],
+    .feature-card[class*="p-5"],
+    .metric-card[class*="p-5"] {
+      padding: 1rem !important;
+    }
+
+    main > div {
+      max-width: 100%;
+    }
+
+    main .grid[class*="grid-cols-2"]:not(.keep-mobile-grid),
+    main .grid[class*="grid-cols-3"]:not(.keep-mobile-grid),
+    main .grid[class*="grid-cols-4"]:not(.keep-mobile-grid),
+    main .grid[class*="grid-cols-5"]:not(.keep-mobile-grid) {
+      grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    main .flex[class*="justify-between"] {
+      min-width: 0;
+    }
+
+    main .text-\[24px\],
+    main .text-\[28px\],
+    main .text-\[32px\] {
+      font-size: 1.45rem !important;
+      line-height: 1.15 !important;
     }
 
     .metric-card,
@@ -250,6 +283,12 @@
     .card:has(table) {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
+    }
+
+    .mobile-command-card {
+      background:
+        radial-gradient(circle at top right, rgba(37,99,235,0.12), transparent 36%),
+        var(--surface);
     }
   }
 
