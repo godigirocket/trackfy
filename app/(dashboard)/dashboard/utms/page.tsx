@@ -53,6 +53,31 @@ async function saveUTMsRemote(userId: string, utms: UTMEntry[]) {
   if (error) throw error;
 }
 
+async function loadLegacyUTMs(siteId: string): Promise<UTMEntry[]> {
+  try {
+    const response = await fetch(`/api/utms?siteId=${encodeURIComponent(siteId)}`, { cache: "no-store" });
+    if (!response.ok) return [];
+    const result = await response.json();
+    return ((result.utms ?? []) as Array<Partial<UTMEntry>>)
+      .filter((utm) => utm.id && utm.url && utm.full && utm.source && utm.medium && utm.campaign)
+      .map((utm) => ({
+        id: String(utm.id),
+        siteId,
+        url: String(utm.url),
+        full: String(utm.full),
+        source: String(utm.source),
+        medium: String(utm.medium),
+        campaign: String(utm.campaign),
+        term: utm.term || undefined,
+        content: utm.content || undefined,
+        clicks: utm.clicks || 0,
+        createdAt: utm.createdAt || new Date().toLocaleDateString("pt-BR"),
+      }));
+  } catch {
+    return [];
+  }
+}
+
 function siteRow(site: TrackingSite, userId: string, activeId: string) {
   let domain = "";
   try { domain = site.websiteUrl ? new URL(site.websiteUrl.startsWith("http") ? site.websiteUrl : `https://${site.websiteUrl}`).hostname : ""; } catch { /* domínio inválido */ }
@@ -228,6 +253,8 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
           const activeId = String((remoteSiteRows ?? []).find((row) => row.is_active)?.id || active.siteId || nextSites[0].id);
           const { error: saveSiteError } = await supabase.from("tracking_sites").upsert(nextSites.map((site) => siteRow(site, uid, activeId)), { onConflict: "id" });
           if (saveSiteError) throw saveSiteError;
+          const legacyUTMs = await loadLegacyUTMs(activeId);
+          nextUTMs = dedupeUTMs([...nextUTMs, ...legacyUTMs]);
           nextUTMs = nextUTMs.map((utm) => ({ ...utm, siteId: utm.siteId || activeId }));
           await saveUTMsRemote(uid, nextUTMs);
           setRemoteCounts({ sites: nextSites.length, utms: nextUTMs.length });
@@ -356,6 +383,10 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
     setCopied(id);
     setTimeout(() => setCopied(null), 2000);
   };
+  const forceSync = () => {
+    setSyncStatus("syncing");
+    window.location.reload();
+  };
 
   const filtered = utms.filter((u) =>
     u.campaign.toLowerCase().includes(search.toLowerCase()) ||
@@ -431,10 +462,13 @@ export default function UTMsPage({ initialTab = "list" }: { initialTab?: UTMTab 
           <span className="w-2.5 h-2.5 rounded-full" style={{ background: syncStatus === "synced" ? "var(--green)" : syncStatus === "error" ? "var(--red)" : syncStatus === "local" ? "var(--yellow)" : "var(--blue)" }} />
           <strong>{syncStatus === "synced" ? "Sincronizado" : syncStatus === "syncing" ? "Sincronizando" : syncStatus === "local" ? "Somente neste dispositivo" : `Erro de sincronização: ${syncError}`}</strong>
         </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <span style={{ color: "var(--text-4)" }}>
           {userId ? `Usuário ${userId.slice(0, 8)}… · ${remoteCounts.sites} sites · ${remoteCounts.utms} UTMs` : "Entre com uma conta Supabase para sincronizar"}
           {lastSyncedAt ? ` · ${new Date(lastSyncedAt).toLocaleTimeString("pt-BR")}` : ""}
         </span>
+          <button type="button" onClick={forceSync} className="px-2.5 py-1.5 rounded-lg font-bold" style={{ color: "var(--text-2)", border: "1px solid var(--border)", background: "var(--surface-2)" }}>Forçar sincronização</button>
+        </div>
       </div>
       <div className="rounded-2xl overflow-hidden border" style={{ borderColor: "var(--border)", background: "var(--surface)", boxShadow: "var(--shadow-sm)" }}>
         <div className="p-5 lg:p-6" style={{ background: "linear-gradient(135deg, #0f172a 0%, #172554 46%, #064e3b 100%)" }}>
