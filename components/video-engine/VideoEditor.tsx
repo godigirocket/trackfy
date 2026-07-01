@@ -9,7 +9,7 @@ import { Timeline } from "./Timeline";
 import { useFFmpeg } from "@/hooks/useFFmpeg";
 import { autoCutByAudio, splitIntoShorts } from "@/lib/video/autoCut";
 import { loadProject, saveProject } from "@/lib/video/indexedDb";
-import type { VideoAsset, VideoClip, VideoProject } from "@/lib/video/types";
+import type { AspectRatio, EditStyle, VideoAsset, VideoClip, VideoProject } from "@/lib/video/types";
 
 const initial: VideoProject = {
   id: "default",
@@ -22,6 +22,11 @@ const initial: VideoProject = {
   hook: "",
   cta: "",
   updatedAt: new Date().toISOString(),
+};
+
+type BatchOutput = {
+  name: string;
+  url: string;
 };
 
 function inspect(file: File): Promise<VideoAsset> {
@@ -38,14 +43,63 @@ function inspect(file: File): Promise<VideoAsset> {
   });
 }
 
+function clipWindow(asset: VideoAsset, startRatio: number, seconds: number): Pick<VideoClip, "start" | "end"> {
+  const duration = Math.max(0.1, asset.duration || seconds);
+  const clipDuration = Math.min(seconds, duration);
+  const maxStart = Math.max(0, duration - clipDuration);
+  const start = Math.min(maxStart, Math.max(0, maxStart * startRatio));
+  return { start, end: start + clipDuration };
+}
+
+function buildVariationProject(
+  asset: VideoAsset,
+  index: number,
+  config: { name: string; ratio: AspectRatio; style: EditStyle; seconds: number; startRatio: number; speed: number; muted?: boolean },
+): VideoProject {
+  const window = clipWindow(asset, config.startRatio, config.seconds);
+  return {
+    ...initial,
+    id: crypto.randomUUID(),
+    name: `${String(index + 1).padStart(2, "0")} - ${config.name}`,
+    ratio: config.ratio,
+    fit: "cover",
+    style: config.style,
+    punchZoom: true,
+    clips: [{
+      id: crypto.randomUUID(),
+      assetId: asset.id,
+      name: `${asset.name} - ${config.name}`,
+      start: window.start,
+      end: window.end,
+      speed: config.speed,
+      muted: config.muted ?? config.speed !== 1,
+    }],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function buildSixVariationProjects(asset: VideoAsset): VideoProject[] {
+  const variations = [
+    { name: "Hook rapido vertical", ratio: "9:16" as const, style: "ads" as const, seconds: 6, startRatio: 0, speed: 1.15 },
+    { name: "Oferta direta", ratio: "9:16" as const, style: "capcut" as const, seconds: 8, startRatio: 0.16, speed: 1 },
+    { name: "Prova social", ratio: "9:16" as const, style: "cinematic" as const, seconds: 10, startRatio: 0.32, speed: 1 },
+    { name: "Feed quadrado", ratio: "1:1" as const, style: "ads" as const, seconds: 12, startRatio: 0.48, speed: 1.2 },
+    { name: "Reels 15 segundos", ratio: "9:16" as const, style: "capcut" as const, seconds: 15, startRatio: 0.64, speed: 1.05 },
+    { name: "Versao wide", ratio: "16:9" as const, style: "clean" as const, seconds: 20, startRatio: 0.8, speed: 1 },
+  ];
+  return variations.map((config, index) => buildVariationProject(asset, index, config));
+}
+
 export function VideoEditor() {
   const [project, setProject] = useState<VideoProject>(initial);
   const [assets, setAssets] = useState<VideoAsset[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [cursor, setCursor] = useState(0);
   const [output, setOutput] = useState("");
+  const [batchOutputs, setBatchOutputs] = useState<BatchOutput[]>([]);
   const [error, setError] = useState("");
   const [autoBusy, setAutoBusy] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
   const { load, exportProject, cancel, loading, progress, status } = useFFmpeg();
 
   const clip = project.clips.find((item) => item.id === selectedId);
@@ -155,11 +209,41 @@ export function VideoEditor() {
     setSelectedId(generated[0]?.id ?? "");
   };
 
+  const exportSixVariations = async () => {
+    setError("");
+    if (!assets.length) {
+      setError("Envie 1 vídeo para gerar 6 variações em massa.");
+      return;
+    }
+    setBatchBusy(true);
+    batchOutputs.forEach((item) => URL.revokeObjectURL(item.url));
+    setBatchOutputs([]);
+    try {
+      const source = assets[0];
+      const variations = buildSixVariationProjects(source);
+      const outputs: BatchOutput[] = [];
+      setProject(variations[0]);
+      setSelectedId(variations[0].clips[0]?.id ?? "");
+
+      for (const variation of variations) {
+        const url = await exportProject(variation, assets);
+        outputs.push({ name: `${variation.name}.mp4`, url });
+        setBatchOutputs([...outputs]);
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Falha ao exportar as variações em massa.");
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
   const clearTimeline = () => {
     setProject((current) => ({ ...current, clips: [] }));
     setSelectedId("");
     if (output) URL.revokeObjectURL(output);
     setOutput("");
+    batchOutputs.forEach((item) => URL.revokeObjectURL(item.url));
+    setBatchOutputs([]);
   };
 
   const patchClip = (patch: Partial<VideoClip>) => {
@@ -254,9 +338,13 @@ export function VideoEditor() {
           <strong>Criativos 15s</strong>
           <span>Monta cortes maiores para Reels, TikTok e stories.</span>
         </button>
-        <button type="button" onClick={makeSpeedVariations} disabled={loading} className="video-action-card">
+        <button type="button" onClick={makeSpeedVariations} disabled={loading || batchBusy} className="video-action-card">
           <strong>Gerar variações</strong>
           <span>Duplica cortes com ritmos diferentes para testar criativos.</span>
+        </button>
+        <button type="button" onClick={exportSixVariations} disabled={loading || autoBusy || batchBusy} className="video-action-card video-action-card--primary">
+          <strong>{batchBusy ? "Exportando pacote..." : "Exportar 6 variações"}</strong>
+          <span>Sobe 1 vídeo e baixa 6 MP4s prontos: hooks, oferta, feed e wide.</span>
         </button>
         <button type="button" onClick={() => setProject((current) => ({ ...current, ratio: current.ratio === "9:16" ? "1:1" : current.ratio === "1:1" ? "16:9" : "9:16" }))} disabled={loading} className="video-action-card">
           <strong>Trocar formato</strong>
@@ -271,6 +359,27 @@ export function VideoEditor() {
           <span>Recomeça os cortes sem apagar os vídeos enviados.</span>
         </button>
       </div>
+
+      {(batchBusy || batchOutputs.length > 0) && (
+        <div className="card p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold" style={{ color: "var(--text-1)" }}>Pacote de criativos</h2>
+              <p className="text-[12px]" style={{ color: "var(--text-3)" }}>
+                {batchBusy ? `Exportando ${batchOutputs.length}/6 arquivos. Mantenha esta aba aberta.` : "Arquivos prontos para baixar."}
+              </p>
+            </div>
+            <span className="badge badge-blue">{batchOutputs.length}/6 MP4</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {batchOutputs.map((item) => (
+              <a key={item.name} href={item.url} download={item.name} className="btn-secondary text-center">
+                Baixar {item.name}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_300px] gap-4">
         <MediaLibrary assets={assets} onUpload={upload} onAdd={add} />

@@ -28,15 +28,6 @@ export function videoFilter(ratio: AspectRatio, fit: FitMode, style: EditStyle =
   return filters.join(",");
 }
 
-function audioTempoFilters(speed: number) {
-  const filters: string[] = [];
-  let remaining = speed;
-  while (remaining > 2) { filters.push("atempo=2"); remaining /= 2; }
-  while (remaining < 0.5) { filters.push("atempo=0.5"); remaining /= 0.5; }
-  filters.push(`atempo=${remaining.toFixed(3)}`);
-  return filters.join(",");
-}
-
 export function trimArgs(input: string, output: string, start: number, end: number, ratio: AspectRatio, fit: FitMode, style: EditStyle = "clean", punchZoom = false, speed = 1, muted = false) {
   if (start < 0 || end <= start) throw new Error("Intervalo de corte inválido.");
   const duration = end - start;
@@ -56,10 +47,10 @@ export function trimArgs(input: string, output: string, start: number, end: numb
     "-movflags", "+faststart",
     "-avoid_negative_ts", "make_zero",
   ];
-  if (muted) {
+  if (muted || Math.abs(safeSpeed - 1) > 0.001) {
     args.push("-an");
   } else {
-    args.push("-map", "0:a?", "-af", audioTempoFilters(safeSpeed), "-c:a", "aac", "-b:a", "128k");
+    args.push("-map", "0:a?", "-c:a", "aac", "-b:a", "128k");
   }
   args.push(output);
   return args;
