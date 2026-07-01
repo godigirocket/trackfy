@@ -31,5 +31,6 @@ export interface VideoProject {
   punchZoom?: boolean;
   hook: string;
   cta: string;
+  accent?: string;
   updatedAt: string;
 }

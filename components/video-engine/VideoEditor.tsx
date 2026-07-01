@@ -21,6 +21,7 @@ const initial: VideoProject = {
   punchZoom: true,
   hook: "",
   cta: "",
+  accent: "#22c55e",
   updatedAt: new Date().toISOString(),
 };
 
@@ -54,9 +55,36 @@ function clipWindow(asset: VideoAsset, startRatio: number, seconds: number): Pic
 function buildVariationProject(
   asset: VideoAsset,
   index: number,
-  config: { name: string; ratio: AspectRatio; style: EditStyle; seconds: number; startRatio: number; speed: number; muted?: boolean },
+  config: {
+    name: string;
+    ratio: AspectRatio;
+    style: EditStyle;
+    seconds: number;
+    startRatio: number;
+    speed: number;
+    hook: string;
+    cta: string;
+    accent: string;
+    scenes?: number;
+    muted?: boolean;
+  },
 ): VideoProject {
-  const window = clipWindow(asset, config.startRatio, config.seconds);
+  const sceneCount = config.scenes ?? 1;
+  const sceneDuration = Math.max(1.2, config.seconds / sceneCount);
+  const clips = Array.from({ length: sceneCount }, (_, sceneIndex) => {
+    const ratioStep = sceneCount === 1 ? 0 : sceneIndex / Math.max(1, sceneCount - 1);
+    const window = clipWindow(asset, Math.min(0.92, config.startRatio + ratioStep * 0.28), sceneDuration);
+    return {
+      id: crypto.randomUUID(),
+      assetId: asset.id,
+      name: `${asset.name} - ${config.name} ${sceneIndex + 1}`,
+      start: window.start,
+      end: window.end,
+      speed: config.speed,
+      muted: config.muted ?? config.speed !== 1,
+    };
+  });
+
   return {
     ...initial,
     id: crypto.randomUUID(),
@@ -65,27 +93,22 @@ function buildVariationProject(
     fit: "cover",
     style: config.style,
     punchZoom: true,
-    clips: [{
-      id: crypto.randomUUID(),
-      assetId: asset.id,
-      name: `${asset.name} - ${config.name}`,
-      start: window.start,
-      end: window.end,
-      speed: config.speed,
-      muted: config.muted ?? config.speed !== 1,
-    }],
+    hook: config.hook,
+    cta: config.cta,
+    accent: config.accent,
+    clips,
     updatedAt: new Date().toISOString(),
   };
 }
 
 function buildSixVariationProjects(asset: VideoAsset): VideoProject[] {
   const variations = [
-    { name: "Hook rapido vertical", ratio: "9:16" as const, style: "ads" as const, seconds: 6, startRatio: 0, speed: 1.15 },
-    { name: "Oferta direta", ratio: "9:16" as const, style: "capcut" as const, seconds: 8, startRatio: 0.16, speed: 1 },
-    { name: "Prova social", ratio: "9:16" as const, style: "cinematic" as const, seconds: 10, startRatio: 0.32, speed: 1 },
-    { name: "Feed quadrado", ratio: "1:1" as const, style: "ads" as const, seconds: 12, startRatio: 0.48, speed: 1.2 },
-    { name: "Reels 15 segundos", ratio: "9:16" as const, style: "capcut" as const, seconds: 15, startRatio: 0.64, speed: 1.05 },
-    { name: "Versao wide", ratio: "16:9" as const, style: "clean" as const, seconds: 20, startRatio: 0.8, speed: 1 },
+    { name: "Hook rapido vertical", ratio: "9:16" as const, style: "ads" as const, seconds: 6, startRatio: 0, speed: 1.15, scenes: 3, hook: "PARE DE PERDER DINHEIRO", cta: "VEJA AGORA", accent: "#22c55e" },
+    { name: "Oferta direta", ratio: "9:16" as const, style: "capcut" as const, seconds: 8, startRatio: 0.14, speed: 1, scenes: 2, hook: "ISSO MUDA O JOGO", cta: "TESTE HOJE", accent: "#3b82f6" },
+    { name: "Prova social", ratio: "9:16" as const, style: "cinematic" as const, seconds: 10, startRatio: 0.3, speed: 1, scenes: 2, hook: "RESULTADO REAL", cta: "CONFIRA", accent: "#f59e0b" },
+    { name: "Feed quadrado", ratio: "1:1" as const, style: "ads" as const, seconds: 12, startRatio: 0.44, speed: 1.2, scenes: 3, hook: "CRIATIVO PARA FEED", cta: "CLIQUE E SAIBA MAIS", accent: "#ef4444" },
+    { name: "Reels 15 segundos", ratio: "9:16" as const, style: "capcut" as const, seconds: 15, startRatio: 0.58, speed: 1.05, scenes: 3, hook: "ANTES DE COMPRAR, VEJA ISSO", cta: "APROVEITE", accent: "#a855f7" },
+    { name: "Versao wide", ratio: "16:9" as const, style: "clean" as const, seconds: 18, startRatio: 0.72, speed: 1, scenes: 2, hook: "VERSAO COMPLETA", cta: "COMECE AGORA", accent: "#06b6d4" },
   ];
   return variations.map((config, index) => buildVariationProject(asset, index, config));
 }

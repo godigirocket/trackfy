@@ -52,6 +52,21 @@ export function Inspector({ project, clip, cursor, onProject, onClip, onSplit }:
         </div>
       </div>
 
+      <div className="grid gap-3">
+        <label className="text-xs font-semibold" style={{ color: "var(--text-2)" }}>
+          Hook no topo
+          <input className="input mt-1" value={project.hook} onChange={(e) => onProject({ hook: e.target.value })} placeholder="Ex: Pare de perder dinheiro" maxLength={42} />
+        </label>
+        <label className="text-xs font-semibold" style={{ color: "var(--text-2)" }}>
+          CTA embaixo
+          <input className="input mt-1" value={project.cta} onChange={(e) => onProject({ cta: e.target.value })} placeholder="Ex: Clique e veja agora" maxLength={42} />
+        </label>
+        <label className="text-xs font-semibold" style={{ color: "var(--text-2)" }}>
+          Cor do destaque
+          <input className="input mt-1 h-10" type="color" value={project.accent ?? "#22c55e"} onChange={(e) => onProject({ accent: e.target.value })} />
+        </label>
+      </div>
+
       <label className="flex items-center gap-2 text-[12px] font-semibold" style={{ color: "var(--text-2)" }}>
         <input type="checkbox" checked={Boolean(project.punchZoom)} onChange={(e) => onProject({ punchZoom: e.target.checked })} />
         Punch zoom automático

@@ -73,7 +73,13 @@ export function useFFmpeg() {
         const input = `input-${i}.${safeExt(asset.name)}`;
         const output = `part-${i}.mp4`;
         await ffmpeg.writeFile(input, await fetchFile(asset.file));
-        await ffmpeg.exec(trimArgs(input, output, clip.start, clip.end, project.ratio, project.fit, project.style ?? "clean", Boolean(project.punchZoom), clip.speed ?? 1, Boolean(clip.muted)));
+        try {
+          await ffmpeg.exec(trimArgs(input, output, clip.start, clip.end, project.ratio, project.fit, project.style ?? "clean", Boolean(project.punchZoom), clip.speed ?? 1, Boolean(clip.muted), project.hook, project.cta, project.accent));
+        } catch (cause) {
+          if (!project.hook && !project.cta) throw cause;
+          setStatus("Texto nao suportado neste navegador. Exportando sem textos...");
+          await ffmpeg.exec(trimArgs(input, output, clip.start, clip.end, project.ratio, project.fit, project.style ?? "clean", Boolean(project.punchZoom), clip.speed ?? 1, Boolean(clip.muted)));
+        }
         await ffmpeg.deleteFile(input);
         parts.push(output);
       }
@@ -82,6 +88,7 @@ export function useFFmpeg() {
       if (parts.length === 1) {
         const data = await ffmpeg.readFile(parts[0]);
         const bytes = typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data);
+        setStatus("VÃ­deo exportado com sucesso.");
         return URL.createObjectURL(new Blob([bytes], { type: "video/mp4" }));
       }
 
