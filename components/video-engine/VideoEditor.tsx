@@ -17,6 +17,8 @@ const initial: VideoProject = {
   clips: [],
   ratio: "9:16",
   fit: "cover",
+  style: "capcut",
+  punchZoom: true,
   hook: "",
   cta: "",
   updatedAt: new Date().toISOString(),
@@ -101,11 +103,37 @@ export function VideoEditor() {
     }
   };
 
+  const autoCapCut = async () => {
+    setError("");
+    if (!assets.length) { setError("Envie pelo menos um vídeo para o auto editor montar os criativos."); return; }
+    setAutoBusy(true);
+    try {
+      const generated = (await Promise.all(assets.map((item) => autoCutByAudio(item, { threshold: 0.028, minSilence: 0.35, padding: 0.12, minClip: 0.55 })))).flat();
+      const bestCuts = generated
+        .sort((a, b) => (b.end - b.start) - (a.end - a.start))
+        .slice(0, 12)
+        .sort((a, b) => a.start - b.start);
+      setProject((current) => ({
+        ...current,
+        ratio: "9:16",
+        fit: "cover",
+        style: "capcut",
+        punchZoom: true,
+        clips: bestCuts.length ? bestCuts : assets.flatMap((item) => splitIntoShorts(item, 8)),
+      }));
+      setSelectedId((bestCuts[0] ?? generated[0])?.id ?? "");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível montar a edição automática.");
+    } finally {
+      setAutoBusy(false);
+    }
+  };
+
   const makeShorts = () => {
     setError("");
     if (!assets.length) { setError("Envie pelo menos um vídeo para criar shorts."); return; }
     const generated = assets.flatMap((item) => splitIntoShorts(item, 12));
-    setProject((current) => ({ ...current, clips: generated }));
+    setProject((current) => ({ ...current, ratio: "9:16", fit: "cover", style: "ads", punchZoom: true, clips: generated }));
     setSelectedId(generated[0]?.id ?? "");
   };
 
@@ -188,6 +216,10 @@ export function VideoEditor() {
       </div>
 
       <div className="video-action-grid">
+        <button type="button" onClick={autoCapCut} disabled={autoBusy || loading} className="video-action-card video-action-card--primary">
+          <strong>{autoBusy ? "Montando criativo..." : "Auto editar estilo CapCut"}</strong>
+          <span>Corta silêncios, monta ritmo vertical e aplica look de criativo.</span>
+        </button>
         <button type="button" onClick={autoCut} disabled={autoBusy || loading} className="video-action-card">
           <strong>{autoBusy ? "Analisando áudio..." : "Auto cortar silêncios"}</strong>
           <span>Remove partes paradas e monta a timeline automaticamente.</span>
@@ -199,6 +231,10 @@ export function VideoEditor() {
         <button type="button" onClick={() => setProject((current) => ({ ...current, ratio: current.ratio === "9:16" ? "1:1" : current.ratio === "1:1" ? "16:9" : "9:16" }))} disabled={loading} className="video-action-card">
           <strong>Trocar formato</strong>
           <span>Alterna 9:16, 1:1 e 16:9 para redes diferentes.</span>
+        </button>
+        <button type="button" onClick={() => setProject((current) => ({ ...current, style: current.style === "capcut" ? "ads" : current.style === "ads" ? "cinematic" : current.style === "cinematic" ? "clean" : "capcut", punchZoom: true }))} disabled={loading} className="video-action-card">
+          <strong>Trocar look</strong>
+          <span>Atual: {project.style ?? "clean"}. Aplica cor, nitidez e punch no export.</span>
         </button>
         <button type="button" onClick={clearTimeline} disabled={loading || !project.clips.length} className="video-action-card video-action-card--danger">
           <strong>Limpar timeline</strong>

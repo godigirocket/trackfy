@@ -1,5 +1,6 @@
 export type AspectRatio = "9:16" | "1:1" | "16:9";
 export type FitMode = "cover" | "contain";
+export type EditStyle = "clean" | "capcut" | "ads" | "cinematic";
 
 export interface VideoAsset {
   id: string;
@@ -24,6 +25,8 @@ export interface VideoProject {
   clips: VideoClip[];
   ratio: AspectRatio;
   fit: FitMode;
+  style?: EditStyle;
+  punchZoom?: boolean;
   hook: string;
   cta: string;
   updatedAt: string;

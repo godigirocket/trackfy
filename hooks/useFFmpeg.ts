@@ -73,7 +73,7 @@ export function useFFmpeg() {
         const input = `input-${i}.${safeExt(asset.name)}`;
         const output = `part-${i}.mp4`;
         await ffmpeg.writeFile(input, await fetchFile(asset.file));
-        await ffmpeg.exec(trimArgs(input, output, clip.start, clip.end, project.ratio, project.fit));
+        await ffmpeg.exec(trimArgs(input, output, clip.start, clip.end, project.ratio, project.fit, project.style ?? "clean", Boolean(project.punchZoom)));
         await ffmpeg.deleteFile(input);
         parts.push(output);
       }

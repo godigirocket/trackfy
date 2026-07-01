@@ -830,7 +830,7 @@
 
   .video-action-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     gap: 12px;
   }
 
@@ -875,6 +875,13 @@
     background:
       radial-gradient(circle at top right, rgba(239,68,68,0.12), transparent 42%),
       var(--surface);
+  }
+
+  .video-action-card--primary {
+    border-color: rgba(37,99,235,0.35);
+    background:
+      radial-gradient(circle at top right, rgba(37,99,235,0.2), transparent 42%),
+      linear-gradient(135deg, var(--surface), var(--surface-2));
   }
 
   /* Section label */
