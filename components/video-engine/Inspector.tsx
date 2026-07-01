@@ -63,6 +63,26 @@ export function Inspector({ project, clip, cursor, onProject, onClip, onSplit }:
             <label className="text-xs">Início<input className="input mt-1" type="number" min={0} step="0.1" value={clip.start} onChange={(e) => onClip({ start: Number(e.target.value) })} /></label>
             <label className="text-xs">Fim<input className="input mt-1" type="number" step="0.1" value={clip.end} onChange={(e) => onClip({ end: Number(e.target.value) })} /></label>
           </div>
+          <div>
+            <label className="section-label">Velocidade do corte</label>
+            <div className="grid grid-cols-4 gap-1.5 mt-2">
+              {[0.75, 1, 1.25, 1.5].map((speed) => (
+                <button
+                  key={speed}
+                  type="button"
+                  onClick={() => onClip({ speed })}
+                  className="rounded-lg px-2 py-2 text-[12px] font-bold"
+                  style={{ background: (clip.speed ?? 1) === speed ? "var(--blue-muted)" : "var(--surface-2)", color: (clip.speed ?? 1) === speed ? "var(--blue)" : "var(--text-3)", border: "1px solid var(--border)" }}
+                >
+                  {speed}x
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-[12px] font-semibold" style={{ color: "var(--text-2)" }}>
+            <input type="checkbox" checked={Boolean(clip.muted)} onChange={(e) => onClip({ muted: e.target.checked })} />
+            Mutar áudio deste corte
+          </label>
           <button className="btn-secondary w-full" onClick={onSplit} disabled={cursor <= clip.start || cursor >= clip.end}>Dividir no cursor ({cursor.toFixed(1)}s)</button>
         </>
       ) : (

@@ -17,6 +17,8 @@ export interface VideoClip {
   name: string;
   start: number;
   end: number;
+  speed?: number;
+  muted?: boolean;
 }
 
 export interface VideoProject {

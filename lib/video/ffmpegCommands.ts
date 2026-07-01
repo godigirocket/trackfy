@@ -28,25 +28,39 @@ export function videoFilter(ratio: AspectRatio, fit: FitMode, style: EditStyle =
   return filters.join(",");
 }
 
-export function trimArgs(input: string, output: string, start: number, end: number, ratio: AspectRatio, fit: FitMode, style: EditStyle = "clean", punchZoom = false) {
+function audioTempoFilters(speed: number) {
+  const filters: string[] = [];
+  let remaining = speed;
+  while (remaining > 2) { filters.push("atempo=2"); remaining /= 2; }
+  while (remaining < 0.5) { filters.push("atempo=0.5"); remaining /= 0.5; }
+  filters.push(`atempo=${remaining.toFixed(3)}`);
+  return filters.join(",");
+}
+
+export function trimArgs(input: string, output: string, start: number, end: number, ratio: AspectRatio, fit: FitMode, style: EditStyle = "clean", punchZoom = false, speed = 1, muted = false) {
   if (start < 0 || end <= start) throw new Error("Intervalo de corte inválido.");
   const duration = end - start;
-  return [
+  const safeSpeed = Math.min(4, Math.max(0.25, speed || 1));
+  const vf = `${videoFilter(ratio, fit, style, punchZoom, duration)},setpts=${(1 / safeSpeed).toFixed(4)}*PTS`;
+  const args = [
     "-y",
     "-ss", start.toFixed(3),
     "-i", input,
     "-t", duration.toFixed(3),
     "-map", "0:v:0",
-    "-map", "0:a?",
-    "-vf", videoFilter(ratio, fit, style, punchZoom, duration),
+    "-vf", vf,
     "-r", "30",
     "-c:v", "libx264",
     "-preset", "veryfast",
     "-crf", "23",
-    "-c:a", "aac",
-    "-b:a", "128k",
     "-movflags", "+faststart",
     "-avoid_negative_ts", "make_zero",
-    output,
   ];
+  if (muted) {
+    args.push("-an");
+  } else {
+    args.push("-map", "0:a?", "-af", audioTempoFilters(safeSpeed), "-c:a", "aac", "-b:a", "128k");
+  }
+  args.push(output);
+  return args;
 }

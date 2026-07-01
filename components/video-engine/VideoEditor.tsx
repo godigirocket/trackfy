@@ -137,6 +137,24 @@ export function VideoEditor() {
     setSelectedId(generated[0]?.id ?? "");
   };
 
+  const makeTimedCuts = (seconds: number, style: "ads" | "capcut" = "ads") => {
+    setError("");
+    if (!assets.length) { setError("Envie pelo menos um vídeo para criar variações."); return; }
+    const generated = assets.flatMap((item) => splitIntoShorts(item, seconds)).slice(0, 20);
+    setProject((current) => ({ ...current, ratio: "9:16", fit: "cover", style, punchZoom: true, clips: generated }));
+    setSelectedId(generated[0]?.id ?? "");
+  };
+
+  const makeSpeedVariations = () => {
+    setError("");
+    const base = project.clips.length ? project.clips : assets.flatMap((item) => splitIntoShorts(item, 8)).slice(0, 6);
+    if (!base.length) { setError("Envie um vídeo ou crie cortes antes de gerar variações."); return; }
+    const speeds = [1, 1.15, 1.3];
+    const generated = speeds.flatMap((speed) => base.slice(0, 4).map((clip) => ({ ...clip, id: crypto.randomUUID(), name: `${clip.name} · ${speed}x`, speed })));
+    setProject((current) => ({ ...current, ratio: "9:16", fit: "cover", style: "ads", punchZoom: true, clips: generated }));
+    setSelectedId(generated[0]?.id ?? "");
+  };
+
   const clearTimeline = () => {
     setProject((current) => ({ ...current, clips: [] }));
     setSelectedId("");
@@ -227,6 +245,18 @@ export function VideoEditor() {
         <button type="button" onClick={makeShorts} disabled={loading} className="video-action-card">
           <strong>Criar shorts de 12s</strong>
           <span>Divide os vídeos em vários criativos curtos para testar.</span>
+        </button>
+        <button type="button" onClick={() => makeTimedCuts(6, "ads")} disabled={loading} className="video-action-card">
+          <strong>Criativos rápidos 6s</strong>
+          <span>Gera variações curtas para anúncios diretos e testes A/B.</span>
+        </button>
+        <button type="button" onClick={() => makeTimedCuts(15, "capcut")} disabled={loading} className="video-action-card">
+          <strong>Criativos 15s</strong>
+          <span>Monta cortes maiores para Reels, TikTok e stories.</span>
+        </button>
+        <button type="button" onClick={makeSpeedVariations} disabled={loading} className="video-action-card">
+          <strong>Gerar variações</strong>
+          <span>Duplica cortes com ritmos diferentes para testar criativos.</span>
         </button>
         <button type="button" onClick={() => setProject((current) => ({ ...current, ratio: current.ratio === "9:16" ? "1:1" : current.ratio === "1:1" ? "16:9" : "9:16" }))} disabled={loading} className="video-action-card">
           <strong>Trocar formato</strong>
